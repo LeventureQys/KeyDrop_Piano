@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>键落钢琴 - 谱面库</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+      font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    .screen {
+      width: 1200px;
+      height: 540px;
+      background: #1f2937;
+      color: #f9fafb;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+      border-radius: 12px;
+    }
+    /* AppBar / 内部布局 */
+    .app-bar {
+      height: 56px;
+      flex-shrink: 0;
+    }
+    .content-area {
+      height: calc(540px - 56px);
+      overflow-y: auto;
+    }
+    /* 隐藏 webkit 系滚动条以避免视觉污染 */
+    .content-area::-webkit-scrollbar { width: 6px; }
+    .content-area::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.4); border-radius: 3px; }
+
+    /* FAB 子选项浮出动画 */
+    .fab-option {
+      transform: translateY(8px);
+      opacity: 0;
+      transition: transform 0.18s ease, opacity 0.18s ease;
+      pointer-events: none;
+    }
+    .fab-open .fab-option {
+      transform: translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .fab-plus {
+      transition: transform 0.22s ease;
+    }
+    .fab-open .fab-plus {
+      transform: rotate(45deg);
+    }
+    /* 长按菜单 */
+    .ctx-menu {
+      position: absolute;
+      min-width: 160px;
+      background: #111827;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      padding: 6px 0;
+      z-index: 60;
+    }
+    .ctx-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 8px 14px;
+      font-size: 14px;
+      color: #f3f4f6;
+      background: transparent;
+      border: 0;
+      cursor: pointer;
+    }
+    .ctx-menu button:hover {
+      background: #374151;
+    }
+    .ctx-menu button.danger {
+      color: #f87171;
+    }
+    /* 列表项 hover */
+    .score-row {
+      transition: background 0.12s ease;
+      user-select: none;
+    }
+    .score-row:hover {
+      background: #374151;
+    }
+    /* 调试栏 */
+    .debug-bar {
+      position: absolute;
+      top: 12px;
+      right: 60px;
+      display: flex;
+      gap: 6px;
+      z-index: 50;
+    }
+    .debug-bar button {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: #4b5563;
+      color: #fef3c7;
+      border: 1px solid #6b7280;
+      cursor: pointer;
+    }
+    .debug-bar button.active {
+      background: #b45309;
+      color: #fff;
+    }
+    .debug-label {
+      font-size: 10px;
+      color: #fbbf24;
+      align-self: center;
+      margin-right: 4px;
+    }
+  </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+  <div class="screen" id="screen-root">
+
+    <!-- ============================== AppBar ============================== -->
+    <div class="app-bar flex items-center justify-between px-6 bg-gray-800 border-b border-gray-700">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">🎹</span>
+        <div class="leading-tight">
+          <div class="text-base font-semibold text-gray-100">键落钢琴</div>
+          <div class="text-xs text-gray-400">KeyDrop_Piano</div>
+        </div>
+      </div>
+      <!-- 调试按钮(右上角,原型调试用) -->
+      <div class="debug-bar">
+        <span class="debug-label">[原型调试]</span>
+        <button id="btn-state-empty" class="active">空库</button>
+        <button id="btn-state-filled">有谱</button>
+      </div>
+      <!-- 设置入口齿轮 -->
+      <button id="btn-settings"
+              class="w-10 h-10 rounded-full hover:bg-gray-700 flex items-center justify-center text-gray-300"
+              title="设置">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
+    </div>
+
+    <!-- ============================== 内容区 ============================== -->
+    <div class="content-area relative">
+
+      <!-- 状态 A:空库 -->
+      <section id="state-empty" class="absolute inset-0 flex flex-col items-center justify-center px-6">
+        <div class="text-[120px] leading-none mb-4 select-none">🎹</div>
+        <div class="text-xl text-gray-100 font-medium mb-2">还没有任何谱面</div>
+        <div class="text-sm text-gray-400 mb-6">导入 MIDI 文件以创建第一个谱面</div>
+        <button id="btn-empty-import"
+                class="px-5 py-2.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium shadow">
+          开始导入
+        </button>
+      </section>
+
+      <!-- 状态 B:有谱 -->
+      <section id="state-filled" class="absolute inset-0 hidden flex-col">
+        <!-- 搜索框 -->
+        <div class="px-6 py-4 bg-gray-800/60 border-b border-gray-700">
+          <div class="flex items-center bg-gray-700 rounded-md px-3 py-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                 class="text-gray-400 mr-2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input id="search-input"
+                   type="text"
+                   placeholder="搜索曲名或作曲家..."
+                   class="flex-1 bg-transparent border-0 outline-none text-sm text-gray-100 placeholder-gray-500" />
+            <span id="search-count" class="text-xs text-gray-400 ml-3">5 首</span>
+          </div>
+        </div>
+        <!-- 列表 -->
+        <div id="score-list" class="flex-1 overflow-y-auto px-6 py-2">
+          <!-- 动态填充 -->
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ============================== 悬浮 FAB ============================== -->
+    <div id="fab-container" class="absolute right-6 bottom-6 flex flex-col items-end gap-3 z-40">
+      <!-- 子选项 -->
+      <button id="fab-import-dk"
+              class="fab-option px-4 py-2 rounded-full bg-purple-600 hover:bg-purple-500 text-white text-sm shadow-lg whitespace-nowrap">
+        📂 导入 DK 谱
+      </button>
+      <button id="fab-from-midi"
+              class="fab-option px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-sm shadow-lg whitespace-nowrap">
+        🎼 从 MIDI 文件创建
+      </button>
+      <!-- 主按钮 + -->
+      <button id="fab-plus"
+              class="fab-plus w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-2xl shadow-xl flex items-center justify-center">
+        +
+      </button>
+    </div>
+
+  </div>
+
+  <script>
+    'use strict';
+
+    // ============================ Mock 数据 ============================
+    const MOCK_SCORES = [
+      { title: "致爱丽丝", composer: "贝多芬", modifiedAt: "2026-06-20", sizeKB: 124 },
+      { title: "小星星", composer: "传统", modifiedAt: "2026-06-18", sizeKB: 32 },
+      { title: "卡农", composer: "帕赫贝尔", modifiedAt: "2026-06-15", sizeKB: 256 },
+      { title: "梦中的婚礼", composer: "克莱德曼", modifiedAt: "2026-06-10", sizeKB: 198 },
+      { title: "天空之城", composer: "久石让", modifiedAt: "2026-06-05", sizeKB: 178 },
+    ];
+
+    // ============================ DOM 引用 ============================
+    const screenRoot = document.getElementById('screen-root');
+    const stateEmpty = document.getElementById('state-empty');
+    const stateFilled = document.getElementById('state-filled');
+    const btnStateEmpty = document.getElementById('btn-state-empty');
+    const btnStateFilled = document.getElementById('btn-state-filled');
+    const btnSettings = document.getElementById('btn-settings');
+    const btnEmptyImport = document.getElementById('btn-empty-import');
+    const fabContainer = document.getElementById('fab-container');
+    const fabPlus = document.getElementById('fab-plus');
+    const fabFromMidi = document.getElementById('fab-from-midi');
+    const fabImportDk = document.getElementById('fab-import-dk');
+    const searchInput = document.getElementById('search-input');
+    const searchCount = document.getElementById('search-count');
+    const scoreListEl = document.getElementById('score-list');
+
+    // ============================ 状态切换 ============================
+    function switchState(state) {
+      if (state === 'empty') {
+        stateEmpty.classList.remove('hidden');
+        stateEmpty.classList.add('flex');
+        stateFilled.classList.add('hidden');
+        stateFilled.classList.remove('flex');
+        btnStateEmpty.classList.add('active');
+        btnStateFilled.classList.remove('active');
+      } else {
+        stateEmpty.classList.add('hidden');
+        stateEmpty.classList.remove('flex');
+        stateFilled.classList.remove('hidden');
+        stateFilled.classList.add('flex');
+        btnStateEmpty.classList.remove('active');
+        btnStateFilled.classList.add('active');
+      }
+      closeContextMenu();
+      closeFab();
+    }
+    btnStateEmpty.addEventListener('click', () => switchState('empty'));
+    btnStateFilled.addEventListener('click', () => switchState('filled'));
+
+    // ============================ 列表渲染 ============================
+    function renderList(filter) {
+      const q = (filter || '').trim().toLowerCase();
+      const filtered = MOCK_SCORES.filter(s =>
+        q === '' || s.title.toLowerCase().startsWith(q) || s.composer.toLowerCase().startsWith(q)
+      );
+      searchCount.textContent = `${filtered.length} 首`;
+      scoreListEl.innerHTML = '';
+      if (filtered.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'text-center text-gray-500 text-sm py-10';
+        empty.textContent = '没有匹配的谱面';
+        scoreListEl.appendChild(empty);
+        return;
+      }
+      filtered.forEach((s, idx) => {
+        const row = document.createElement('div');
+        row.className = 'score-row flex items-center justify-between px-4 py-3 rounded-md border-b border-gray-700/40 cursor-pointer';
+        row.style.minHeight = '40px';
+        row.dataset.score_index = String(idx);
+        row.innerHTML = `
+          <div class="flex items-center gap-4 min-w-0">
+            <div class="w-9 h-9 rounded bg-blue-600/30 text-blue-300 flex items-center justify-center text-base">
+              🎵
+            </div>
+            <div class="min-w-0">
+              <div class="text-sm font-medium text-gray-100 truncate">${escapeHtml(s.title)}</div>
+              <div class="text-xs text-gray-400 truncate">${escapeHtml(s.composer)}</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-6 text-xs text-gray-400 flex-shrink-0">
+            <span>${s.modifiedAt}</span>
+            <span class="w-14 text-right">${s.sizeKB} KB</span>
+          </div>
+        `;
+        attachLongPress(row, s);
+        row.addEventListener('click', (e) => {
+          // 普通点击不打开菜单,仅在未触发长按时进行无副作用响应
+          if (row.dataset.long_pressed === '1') {
+            row.dataset.long_pressed = '0';
+            return;
+          }
+          // 单击 → 进入演奏(原型期 console)
+          console.log(`nav: player (score=${s.title})`);
+        });
+        scoreListEl.appendChild(row);
+      });
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // ============================ 长按检测 ============================
+    const LONG_PRESS_MS = 600;
+    function attachLongPress(el, score) {
+      let timer = null;
+      let startX = 0, startY = 0;
+      function start(e) {
+        clearTimer();
+        const point = (e.touches && e.touches[0]) || e;
+        startX = point.clientX || 0;
+        startY = point.clientY || 0;
+        timer = setTimeout(() => {
+          el.dataset.long_pressed = '1';
+          openContextMenu(point.clientX, point.clientY, score);
+        }, LONG_PRESS_MS);
+      }
+      function move(e) {
+        const point = (e.touches && e.touches[0]) || e;
+        if (Math.abs((point.clientX || 0) - startX) > 6 || Math.abs((point.clientY || 0) - startY) > 6) {
+          clearTimer();
+        }
+      }
+      function clearTimer() {
+        if (timer) { clearTimeout(timer); timer = null; }
+      }
+      el.addEventListener('mousedown', start);
+      el.addEventListener('mousemove', move);
+      el.addEventListener('mouseup', clearTimer);
+      el.addEventListener('mouseleave', clearTimer);
+      el.addEventListener('touchstart', start, { passive: true });
+      el.addEventListener('touchmove', move, { passive: true });
+      el.addEventListener('touchend', clearTimer);
+    }
+
+    // ============================ 长按菜单 ============================
+    let currentMenu = null;
+    function openContextMenu(clientX, clientY, score) {
+      closeContextMenu();
+      const menu = document.createElement('div');
+      menu.className = 'ctx-menu';
+      const screenRect = screenRoot.getBoundingClientRect();
+      // 限制菜单在屏幕容器内
+      let x = clientX - screenRect.left;
+      let y = clientY - screenRect.top;
+      x = Math.min(x, 1200 - 170);
+      y = Math.min(y, 540 - 180);
+      menu.style.left = `${Math.max(8, x)}px`;
+      menu.style.top = `${Math.max(8, y)}px`;
+      const actions = [
+        { label: '演奏', key: 'play' },
+        { label: '重命名', key: 'rename' },
+        { label: '导出', key: 'export' },
+        { label: '删除', key: 'delete', danger: true },
+      ];
+      actions.forEach(act => {
+        const btn = document.createElement('button');
+        btn.textContent = act.label;
+        if (act.danger) btn.classList.add('danger');
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          console.log(`action: ${act.key} (score=${score.title})`);
+          closeContextMenu();
+        });
+        menu.appendChild(btn);
+      });
+      screenRoot.appendChild(menu);
+      currentMenu = menu;
+      // 点击空白处关闭菜单
+      setTimeout(() => {
+        document.addEventListener('mousedown', onOutsideClick, { once: true });
+      }, 0);
+    }
+    function onOutsideClick(e) {
+      if (currentMenu && !currentMenu.contains(e.target)) {
+        closeContextMenu();
+      }
+    }
+    function closeContextMenu() {
+      if (currentMenu) {
+        currentMenu.remove();
+        currentMenu = null;
+      }
+    }
+
+    // ============================ 搜索框 ============================
+    searchInput.addEventListener('input', (e) => {
+      renderList(e.target.value);
+    });
+
+    // ============================ FAB ============================
+    function openFab() { fabContainer.classList.add('fab-open'); }
+    function closeFab() { fabContainer.classList.remove('fab-open'); }
+    fabPlus.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fabContainer.classList.toggle('fab-open');
+    });
+    fabFromMidi.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeFab();
+      console.log('nav: convert');
+    });
+    fabImportDk.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeFab();
+      console.log('nav: import-dk');
+    });
+    // 点击屏幕空白处收起 FAB
+    screenRoot.addEventListener('click', (e) => {
+      if (!fabContainer.contains(e.target)) {
+        closeFab();
+      }
+    });
+
+    // ============================ 其他导航 ============================
+    btnSettings.addEventListener('click', () => console.log('nav: settings'));
+    btnEmptyImport.addEventListener('click', () => console.log('nav: convert'));
+
+    // ============================ 初始化 ============================
+    renderList('');
+    switchState('empty'); // 默认空库,符合"首次使用"语义
+  </script>
+
+  <!--
+  ========== 元素清单 ==========
+
+  | 编号    | 名称                | 类型         | 状态                | 行为                                                          |
+  |---------|---------------------|--------------|---------------------|---------------------------------------------------------------|
+  | LIB-01  | App 标题            | 文本+图标    | 静态                | 显示 "🎹 键落钢琴 / KeyDrop_Piano"                            |
+  | LIB-02  | 设置入口            | IconButton   | 默认/hover          | 点击 → console.log("nav: settings")                           |
+  | LIB-03  | 状态切换按钮组      | DebugButton  | 空库 active / 有谱 active | 原型调试用,在 A/B 状态间切换                              |
+  | LIB-04  | 空库插画            | Emoji 占位   | 静态                | 显示 🎹 大号图标                                              |
+  | LIB-05  | 空库主提示          | 文本         | 静态                | "还没有任何谱面"                                              |
+  | LIB-06  | 空库副提示          | 文本         | 静态                | "导入 MIDI 文件以创建第一个谱面"                              |
+  | LIB-07  | 空库导入按钮        | Button       | 默认/hover          | 点击 → console.log("nav: convert")                            |
+  | LIB-08  | 搜索框              | Input        | 默认/输入           | 输入触发 renderList 前缀过滤(标题或作曲家)                    |
+  | LIB-09  | 搜索结果计数        | 文本         | 动态                | 显示当前匹配 "N 首"                                           |
+  | LIB-10  | 谱面列表项          | ListItem     | 默认/hover/长按     | 单击 → console.log("nav: player"); 长按 600ms → 弹出菜单      |
+  | LIB-11  | 列表项图标          | Emoji 占位   | 静态                | 🎵                                                            |
+  | LIB-12  | 列表项-曲名         | 文本         | 静态                | MOCK_SCORES[i].title                                          |
+  | LIB-13  | 列表项-作曲家       | 文本         | 静态                | MOCK_SCORES[i].composer                                       |
+  | LIB-14  | 列表项-修改时间     | 文本         | 静态                | MOCK_SCORES[i].modifiedAt                                     |
+  | LIB-15  | 列表项-文件大小     | 文本         | 静态                | MOCK_SCORES[i].sizeKB + " KB"                                 |
+  | LIB-16  | 长按上下文菜单      | Menu         | 关闭/打开           | 选项: 演奏 / 重命名 / 导出 / 删除 → console.log("action: x") |
+  | LIB-17  | FAB 主按钮 +        | FAB          | 关闭/展开(旋转45度) | 点击展开/收起子选项                                           |
+  | LIB-18  | FAB 子项-从 MIDI    | FAB-Option   | 关闭/展开           | 点击 → console.log("nav: convert")                            |
+  | LIB-19  | FAB 子项-导入 DK    | FAB-Option   | 关闭/展开           | 点击 → console.log("nav: import-dk")                          |
+  | LIB-20  | 屏幕容器            | Container    | 静态                | 固定 1200×540, overflow: hidden                               |
+
+  -->
+</body>
+</html>

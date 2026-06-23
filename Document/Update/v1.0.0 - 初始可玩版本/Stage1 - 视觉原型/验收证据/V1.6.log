@@ -1,0 +1,5 @@
+=== V1.6 element-id counts per file ===
+pages/library.html: unique LIB-* IDs = 20
+pages/settings.html: unique SET-* IDs = 15
+pages/convert.html: unique CVT-* IDs = 32
+pages/player.html: unique PLY-* IDs = 40

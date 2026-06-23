@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>键落钢琴 - 设置</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+      font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    .screen {
+      width: 1200px;
+      height: 540px;
+      background: #1f2937;
+      color: #f9fafb;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+      border-radius: 12px;
+    }
+    .app-bar {
+      height: 48px;
+      flex-shrink: 0;
+    }
+    .config-area {
+      height: calc(540px - 48px - 36px);
+      overflow-y: auto;
+    }
+    .config-area::-webkit-scrollbar { width: 6px; }
+    .config-area::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.4); border-radius: 3px; }
+
+    /* 单选按钮组样式 */
+    .seg-group {
+      display: inline-flex;
+      background: #374151;
+      border-radius: 6px;
+      padding: 2px;
+    }
+    .seg-btn {
+      padding: 4px 12px;
+      font-size: 12px;
+      color: #d1d5db;
+      background: transparent;
+      border: 0;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+    }
+    .seg-btn:hover {
+      color: #f9fafb;
+    }
+    .seg-btn.active {
+      background: #2563eb;
+      color: #fff;
+    }
+
+    /* 滑条 */
+    .slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 4px;
+      background: #4b5563;
+      border-radius: 2px;
+      outline: none;
+    }
+    .slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #3b82f6;
+      cursor: pointer;
+      box-shadow: 0 0 0 2px #1f2937;
+    }
+    .slider::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #3b82f6;
+      cursor: pointer;
+      border: 2px solid #1f2937;
+    }
+
+    /* Toggle 开关 */
+    .toggle {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      background: #4b5563;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.18s ease;
+    }
+    .toggle::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.18s ease;
+    }
+    .toggle.on {
+      background: #16a34a;
+    }
+    .toggle.on::after {
+      transform: translateX(16px);
+    }
+
+    /* 校准对话框 */
+    .modal-mask {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 80;
+    }
+    .modal-box {
+      background: #111827;
+      border: 1px solid #374151;
+      border-radius: 10px;
+      padding: 24px 28px;
+      width: 360px;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    }
+    .modal-spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid #374151;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 12px auto;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* 卡片标题分隔 */
+    .group-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #9ca3af;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+    .field-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(75, 85, 99, 0.4);
+    }
+    .field-row:last-child { border-bottom: 0; }
+    .field-label {
+      font-size: 13px;
+      color: #e5e7eb;
+      min-width: 110px;
+    }
+    .field-hint {
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+
+    /* JSON 预览栏 */
+    .json-bar {
+      height: 36px;
+      padding: 0 16px;
+      background: #0b1220;
+      border-top: 1px solid #1f2937;
+      display: flex;
+      align-items: center;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 10.5px;
+      color: #9ca3af;
+      white-space: nowrap;
+      overflow-x: auto;
+    }
+    .json-bar::-webkit-scrollbar { height: 4px; }
+    .json-bar::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.4); }
+    .json-bar .json-key { color: #93c5fd; }
+    .json-bar .json-str { color: #fcd34d; }
+    .json-bar .json-num { color: #86efac; }
+    .json-bar .json-bool { color: #f0abfc; }
+  </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+  <div class="screen" id="screen-root">
+
+    <!-- ============================== AppBar ============================== -->
+    <div class="app-bar flex items-center px-4 bg-gray-800 border-b border-gray-700">
+      <button id="btn-back"
+              class="w-8 h-8 rounded-full hover:bg-gray-700 flex items-center justify-center text-gray-300"
+              title="返回">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
+      <div class="text-sm font-semibold text-gray-100 ml-2">设置</div>
+    </div>
+
+    <!-- ============================== 配置区 ============================== -->
+    <div class="config-area px-6 py-4">
+      <!-- 4 列网格(2 列卡片 × 2 行)排布 5 个分组 -->
+      <div class="grid grid-cols-2 gap-4">
+
+        <!-- 卡片 1:键盘 -->
+        <div class="bg-gray-800 rounded-lg p-4">
+          <div class="group-title">⌨ 键盘</div>
+          <div class="field-row">
+            <div>
+              <div class="field-label">硬件键数</div>
+              <div class="field-hint">物理琴键总数</div>
+            </div>
+            <div class="seg-group" data-key="hardwareKeyboardKeys">
+              <button class="seg-btn" data-value="49">49</button>
+              <button class="seg-btn" data-value="61">61</button>
+              <button class="seg-btn" data-value="76">76</button>
+              <button class="seg-btn active" data-value="88">88</button>
+            </div>
+          </div>
+          <div class="field-row">
+            <div>
+              <div class="field-label">视口键数</div>
+              <div class="field-hint">屏幕中可见键数</div>
+            </div>
+            <div class="seg-group" data-key="viewportKeys">
+              <button class="seg-btn" data-value="24">24</button>
+              <button class="seg-btn active" data-value="32">32</button>
+              <button class="seg-btn" data-value="40">40</button>
+            </div>
+          </div>
+          <div class="field-row">
+            <div>
+              <div class="field-label">滚动模式</div>
+              <div class="field-hint">视口跟随策略</div>
+            </div>
+            <div class="seg-group" data-key="scrollMode">
+              <button class="seg-btn active" data-value="auto">自动</button>
+              <button class="seg-btn" data-value="manual">手动</button>
+              <button class="seg-btn" data-value="fixed">固定</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 卡片 2:显示 -->
+        <div class="bg-gray-800 rounded-lg p-4">
+          <div class="group-title">🎬 显示</div>
+          <div class="field-row" style="flex-direction:column; align-items:stretch;">
+            <div class="flex items-center justify-between mb-2">
+              <div>
+                <div class="field-label">下落时长</div>
+                <div class="field-hint">key 从屏顶到判定线时长</div>
+              </div>
+              <div id="val-fallDurationSeconds" class="text-sm font-mono text-blue-300 ml-2">1.5 s</div>
+            </div>
+            <input id="slider-fallDurationSeconds"
+                   type="range" min="1.0" max="3.0" step="0.1" value="1.5"
+                   class="slider" data-key="fallDurationSeconds" data-suffix="s" />
+          </div>
+        </div>
+
+        <!-- 卡片 3:判定 -->
+        <div class="bg-gray-800 rounded-lg p-4">
+          <div class="group-title">🎯 判定</div>
+          <div class="field-row">
+            <div>
+              <div class="field-label">判定档位</div>
+              <div class="field-hint">完美窗宽度</div>
+            </div>
+            <div class="seg-group" data-key="judgmentWidth">
+              <button class="seg-btn" data-value="strict">严 60ms</button>
+              <button class="seg-btn" data-value="medium">中 100ms</button>
+              <button class="seg-btn active" data-value="wide">宽 160ms</button>
+            </div>
+          </div>
+          <div class="field-row" style="flex-direction:column; align-items:stretch;">
+            <div class="flex items-center justify-between mb-2">
+              <div>
+                <div class="field-label">输入延迟校准</div>
+                <div class="field-hint">补偿 MIDI/音频延迟</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="val-inputLatencyOffsetMs" class="text-sm font-mono text-blue-300">0 ms</span>
+                <button id="btn-calibrate"
+                        class="px-2.5 py-1 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white">
+                  校准
+                </button>
+              </div>
+            </div>
+            <input id="slider-inputLatencyOffsetMs"
+                   type="range" min="-100" max="100" step="5" value="0"
+                   class="slider" data-key="inputLatencyOffsetMs" data-suffix="ms" />
+          </div>
+        </div>
+
+        <!-- 卡片 4:演奏 -->
+        <div class="bg-gray-800 rounded-lg p-4">
+          <div class="group-title">🎵 演奏</div>
+          <div class="field-row" style="flex-direction:column; align-items:stretch;">
+            <div class="flex items-center justify-between mb-2">
+              <div>
+                <div class="field-label">BPM 倍率</div>
+                <div class="field-hint">全局速度系数</div>
+              </div>
+              <div id="val-bpmMultiplier" class="text-sm font-mono text-blue-300 ml-2">1.00×</div>
+            </div>
+            <input id="slider-bpmMultiplier"
+                   type="range" min="0.5" max="2.0" step="0.05" value="1.0"
+                   class="slider" data-key="bpmMultiplier" data-suffix="×" />
+          </div>
+          <div class="field-row">
+            <div>
+              <div class="field-label">默认模式</div>
+              <div class="field-hint">打开谱面时的默认模式</div>
+            </div>
+            <div class="seg-group" data-key="defaultMode">
+              <button class="seg-btn active" data-value="learning">学习</button>
+              <button class="seg-btn" data-value="performance">演奏</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 卡片 5:调试(单列,跨两列) -->
+      <div class="grid grid-cols-1 gap-4 mt-4">
+        <div class="bg-gray-800 rounded-lg p-4">
+          <div class="group-title">🛠 调试</div>
+          <div class="field-row">
+            <div>
+              <div class="field-label">DebugMidiInjector</div>
+              <div class="field-hint">无琴键时,用屏幕键盘注入 MIDI 事件以排查问题</div>
+            </div>
+            <div id="toggle-debugMidiInjector" class="toggle" data-key="debugMidiInjectorEnabled"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============================== JSON 预览栏 ============================== -->
+    <div class="json-bar" id="json-preview" title="实时 AppConfig 预览">
+      <!-- 动态渲染 -->
+    </div>
+
+  </div>
+
+  <script>
+    'use strict';
+
+    // ============================ 配置初值 ============================
+    const config = {
+      hardwareKeyboardKeys: 88,
+      viewportKeys: 32,
+      scrollMode: 'auto',
+      fallDurationSeconds: 1.5,
+      judgmentWidth: 'wide',
+      inputLatencyOffsetMs: 0,
+      bpmMultiplier: 1.0,
+      defaultMode: 'learning',
+      debugMidiInjectorEnabled: false,
+    };
+
+    const screenRoot = document.getElementById('screen-root');
+    const jsonPreview = document.getElementById('json-preview');
+    const btnBack = document.getElementById('btn-back');
+    const btnCalibrate = document.getElementById('btn-calibrate');
+    const toggleDebug = document.getElementById('toggle-debugMidiInjector');
+
+    // ============================ 单选组(seg-group) ============================
+    document.querySelectorAll('.seg-group').forEach(group => {
+      const key = group.dataset.key;
+      group.querySelectorAll('.seg-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          group.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          let v = btn.dataset.value;
+          // 数值类字段:hardwareKeyboardKeys / viewportKeys
+          if (key === 'hardwareKeyboardKeys' || key === 'viewportKeys') {
+            v = parseInt(v, 10);
+          }
+          config[key] = v;
+          renderJson();
+        });
+      });
+    });
+
+    // ============================ 滑条 ============================
+    function bindSlider(sliderId, valId, formatter) {
+      const slider = document.getElementById(sliderId);
+      const valEl = document.getElementById(valId);
+      const key = slider.dataset.key;
+      slider.addEventListener('input', () => {
+        const v = parseFloat(slider.value);
+        config[key] = v;
+        valEl.textContent = formatter(v);
+        renderJson();
+      });
+    }
+    bindSlider('slider-fallDurationSeconds', 'val-fallDurationSeconds',
+               v => `${v.toFixed(1)} s`);
+    bindSlider('slider-inputLatencyOffsetMs', 'val-inputLatencyOffsetMs',
+               v => `${v > 0 ? '+' : ''}${Math.round(v)} ms`);
+    bindSlider('slider-bpmMultiplier', 'val-bpmMultiplier',
+               v => `${v.toFixed(2)}×`);
+
+    // ============================ Toggle ============================
+    toggleDebug.addEventListener('click', () => {
+      config.debugMidiInjectorEnabled = !config.debugMidiInjectorEnabled;
+      toggleDebug.classList.toggle('on', config.debugMidiInjectorEnabled);
+      renderJson();
+    });
+
+    // ============================ 校准对话框 ============================
+    btnCalibrate.addEventListener('click', () => {
+      openCalibrationModal();
+    });
+
+    function openCalibrationModal() {
+      const mask = document.createElement('div');
+      mask.className = 'modal-mask';
+      mask.innerHTML = `
+        <div class="modal-box">
+          <div class="text-base text-gray-100 font-medium">输入延迟校准</div>
+          <div class="modal-spinner"></div>
+          <div class="text-sm text-gray-300">请在电钢琴上按下任意键…</div>
+          <div class="text-xs text-gray-500 mt-1">3 秒后自动取消</div>
+        </div>
+      `;
+      screenRoot.appendChild(mask);
+      setTimeout(() => {
+        mask.remove();
+        // mock:校准结果 +18ms
+        config.inputLatencyOffsetMs = 18;
+        const slider = document.getElementById('slider-inputLatencyOffsetMs');
+        slider.value = 18;
+        document.getElementById('val-inputLatencyOffsetMs').textContent = '+18 ms';
+        renderJson();
+      }, 3000);
+    }
+
+    // ============================ 返回 ============================
+    btnBack.addEventListener('click', () => console.log('nav: back'));
+
+    // ============================ JSON 预览 ============================
+    function renderJson() {
+      const ordered = {
+        hardwareKeyboardKeys: config.hardwareKeyboardKeys,
+        viewportKeys: config.viewportKeys,
+        scrollMode: config.scrollMode,
+        fallDurationSeconds: Number(config.fallDurationSeconds.toFixed(2)),
+        judgmentWidth: config.judgmentWidth,
+        inputLatencyOffsetMs: Math.round(config.inputLatencyOffsetMs),
+        bpmMultiplier: Number(config.bpmMultiplier.toFixed(2)),
+        defaultMode: config.defaultMode,
+        debugMidiInjectorEnabled: config.debugMidiInjectorEnabled,
+      };
+      const raw = JSON.stringify(ordered);
+      // 简易着色
+      const colored = raw
+        .replace(/"([^"]+)":/g, '<span class="json-key">"$1"</span>:')
+        .replace(/:\s*"([^"]+)"/g, ': <span class="json-str">"$1"</span>')
+        .replace(/:\s*(-?\d+(?:\.\d+)?)/g, ': <span class="json-num">$1</span>')
+        .replace(/:\s*(true|false)/g, ': <span class="json-bool">$1</span>');
+      jsonPreview.innerHTML = `AppConfig = ${colored}`;
+    }
+    renderJson();
+  </script>
+
+  <!--
+  ========== 元素清单 ==========
+
+  | 编号   | 名称                       | 类型         | 状态                | 行为                                                                  |
+  |--------|----------------------------|--------------|---------------------|-----------------------------------------------------------------------|
+  | SET-01 | 返回箭头                   | IconButton   | 默认/hover          | 点击 → console.log("nav: back")                                       |
+  | SET-02 | 页面标题                   | 文本         | 静态                | "设置"                                                                |
+  | SET-03 | 硬件键数(键盘组)           | SegGroup     | 49/61/76/88         | 单选 → 更新 config.hardwareKeyboardKeys → JSON 预览刷新                |
+  | SET-04 | 视口键数(键盘组)           | SegGroup     | 24/32/40            | 单选 → 更新 config.viewportKeys                                       |
+  | SET-05 | 滚动模式(键盘组)           | SegGroup     | auto/manual/fixed   | 单选 → 更新 config.scrollMode                                         |
+  | SET-06 | 下落时长滑条(显示组)       | RangeSlider  | 1.0~3.0,步进 0.1   | 拖动 → 更新 config.fallDurationSeconds + 右侧数字                     |
+  | SET-07 | 判定档位(判定组)           | SegGroup     | strict/medium/wide  | 单选 → 更新 config.judgmentWidth                                      |
+  | SET-08 | 输入延迟校准滑条(判定组)   | RangeSlider  | -100~+100,步进 5   | 拖动 → 更新 config.inputLatencyOffsetMs + 数字                        |
+  | SET-09 | 校准按钮(判定组)           | Button       | 默认/hover          | 点击 → 弹出对话框,3 秒后关闭并将延迟设为 +18ms                       |
+  | SET-10 | 校准对话框                 | Modal        | 打开/关闭           | 3 秒后自动关闭;含 spinner 与提示文案                                  |
+  | SET-11 | BPM 倍率滑条(演奏组)       | RangeSlider  | 0.5~2.0,步进 0.05  | 拖动 → 更新 config.bpmMultiplier + 数字                               |
+  | SET-12 | 默认模式(演奏组)           | SegGroup     | learning/performance| 单选 → 更新 config.defaultMode                                        |
+  | SET-13 | DebugMidiInjector 开关     | Toggle       | 关(默认)/开         | 点击切换 → 更新 config.debugMidiInjectorEnabled                       |
+  | SET-14 | JSON 预览栏                | StatusBar    | 实时刷新            | 显示当前完整 AppConfig 的 JSON(带语法高亮)                            |
+  | SET-15 | 屏幕容器                   | Container    | 静态                | 固定 1200×540, overflow: hidden                                       |
+
+  -->
+</body>
+</html>

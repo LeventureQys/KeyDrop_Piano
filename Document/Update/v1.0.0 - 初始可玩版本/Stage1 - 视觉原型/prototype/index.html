@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>键落钢琴 KeyDrop_Piano - 视觉原型 (v1.0.0)</title>
+
+  <!-- Tailwind CDN: 仅为顶部导航的图标按钮配色 / 子页面已自带 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- 公共样式 (CSS 变量 + 手机壳装饰) -->
+  <link rel="stylesheet" href="shared/styles.css">
+</head>
+<body>
+
+  <!-- ============================================================ -->
+  <!-- 顶部导航条                                                    -->
+  <!-- ============================================================ -->
+  <nav class="app-nav" role="navigation" aria-label="原型页面切换">
+    <div class="app-nav__title">🎹 键落钢琴 原型</div>
+
+    <div class="app-nav__tabs" id="nav-tabs">
+      <button class="app-nav__tab is-active"
+              data-page="library"
+              data-src="pages/library.html">谱面库</button>
+      <button class="app-nav__tab"
+              data-page="settings"
+              data-src="pages/settings.html">设置</button>
+      <button class="app-nav__tab"
+              data-page="convert"
+              data-src="pages/convert.html">转换页</button>
+      <button class="app-nav__tab"
+              data-page="player"
+              data-src="pages/player.html">播放器</button>
+    </div>
+
+    <button class="app-nav__reload"
+            id="btn-reload"
+            title="强制刷新当前 iframe (重新触发原型动画)">
+      🔄 重新加载
+    </button>
+  </nav>
+
+  <!-- ============================================================ -->
+  <!-- 主区: 手机壳装饰 + iframe 屏幕                                 -->
+  <!-- ============================================================ -->
+  <main class="stage">
+    <div class="iframe-frame" id="phone-frame">
+      <!-- 屏幕 iframe: 固定 1200x540, 相对路径加载子页 -->
+      <iframe class="screen"
+              id="screen-iframe"
+              src="pages/library.html"
+              title="原型屏幕内容"
+              loading="eager"></iframe>
+    </div>
+
+    <p class="stage__caption">
+      屏幕模拟横屏 <strong>2400×1080</strong> 真机,原型按 <strong>1:2</strong> 缩放显示为 <code>1200×540</code>。<br>
+      <span style="opacity:.7">每个子页右上角均有"原型调试用"状态切换栏。点击上方"重新加载"可重新触发循环下落 / toast 等动画。</span>
+    </p>
+  </main>
+
+  <!-- ============================================================ -->
+  <!-- 路由 + 重新加载 JS                                            -->
+  <!-- ============================================================ -->
+  <script>
+    (function () {
+      'use strict';
+
+      const tabsContainer = document.getElementById('nav-tabs');
+      const iframe = document.getElementById('screen-iframe');
+      const reloadBtn = document.getElementById('btn-reload');
+
+      // 点击 tab 切换 iframe src
+      tabsContainer.addEventListener('click', function (e) {
+        const target = e.target.closest('.app-nav__tab');
+        if (!target) return;
+
+        const src = target.getAttribute('data-src');
+        const page = target.getAttribute('data-page');
+        if (!src) return;
+
+        // 切换 active 状态
+        const allTabs = tabsContainer.querySelectorAll('.app-nav__tab');
+        allTabs.forEach(function (t) { t.classList.remove('is-active'); });
+        target.classList.add('is-active');
+
+        // 切换 iframe (使用相对路径,规避 file:// CORS)
+        iframe.src = src;
+
+        // 同步 hash 便于刷新后保留页面
+        if (window.location.hash !== '#' + page) {
+          window.location.hash = page;
+        }
+      });
+
+      // 重新加载按钮: 强制刷新当前 iframe
+      reloadBtn.addEventListener('click', function () {
+        // 用 +'?_=t' 强制绕过缓存
+        const current = iframe.getAttribute('src').split('?')[0];
+        iframe.src = current + '?_=' + Date.now();
+      });
+
+      // 启动时按 hash 路由
+      function applyHashRoute() {
+        const hash = (window.location.hash || '').replace(/^#/, '');
+        if (!hash) return;
+        const target = tabsContainer.querySelector('[data-page="' + hash + '"]');
+        if (target) target.click();
+      }
+      applyHashRoute();
+      window.addEventListener('hashchange', applyHashRoute);
+    })();
+  </script>
+</body>
+</html>

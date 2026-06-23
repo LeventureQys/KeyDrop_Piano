@@ -1,0 +1,17 @@
+=== V1.2.1 Tailwind CDN present ===
+pages/library.html
+pages/settings.html
+pages/convert.html
+pages/player.html
+
+=== V1.2.2 1200x540 screen container ===
+pages/library.html: width-1200=1, height-540=1, .screen=1
+pages/settings.html: width-1200=1, height-540=1, .screen=1
+pages/convert.html: width-1200=1, height-540=1, .screen=1
+pages/player.html: width-1200=1, height-540=1, .screen=1
+
+=== V1.2.3 element-list comment present ===
+pages/library.html: 元素清单 marker count = 1
+pages/settings.html: 元素清单 marker count = 1
+pages/convert.html: 元素清单 marker count = 1
+pages/player.html: 元素清单 marker count = 1

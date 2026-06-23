@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>键落钢琴 - 播放器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html, body { overflow: hidden; }
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+      font-family: system-ui, sans-serif;
+    }
+    .screen {
+      width: 1200px;
+      height: 540px;
+      background: #1f2937;
+      color: #f9fafb;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 10px 40px rgba(0,0,0,.2);
+      border-radius: 12px;
+    }
+
+    /* ========== 信息栏 (81px) ========== */
+    .info-bar {
+      height: 81px;
+      padding: 6px 20px;
+      box-sizing: border-box;
+      background: #111827;
+      border-bottom: 1px solid #374151;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 11px;
+    }
+    .info-cell { display: flex; flex-direction: column; line-height: 1.25; }
+    .info-cell .label { color: #9ca3af; font-size: 10px; }
+    .info-cell .value { color: #f9fafb; font-size: 13px; font-weight: 600; }
+    .progress-bar { width: 110px; height: 4px; background: #374151; border-radius: 2px; overflow: hidden; margin-top: 4px; }
+    .progress-bar > div { width: 38%; height: 100%; background: #3b82f6; }
+
+    .mode-pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+    }
+    .mode-pill.learning { background: #16a34a; color: #ffffff; }
+    .mode-pill.performance { background: #7c3aed; color: #ffffff; }
+
+    .stats { display: flex; gap: 6px; font-size: 11px; }
+    .stat-item { display: flex; flex-direction: column; align-items: center; min-width: 28px; }
+    .stat-item .stat-label { color: #9ca3af; font-size: 10px; }
+    .stat-item .stat-value { font-weight: 700; font-size: 12px; }
+    .stat-perfect { color: #22d3ee; }
+    .stat-early   { color: #fbbf24; }
+    .stat-late    { color: #fb923c; }
+    .stat-miss    { color: #9ca3af; }
+    .stat-wrong   { color: #ef4444; }
+
+    .icon-btn {
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      background: #374151; border-radius: 6px;
+      cursor: pointer; user-select: none;
+      font-size: 16px;
+    }
+    .icon-btn:hover { background: #4b5563; }
+
+    /* ========== 下落区 (351px) ========== */
+    .fall-area {
+      height: 351px;
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(to bottom, #1f2937 0%, #111827 100%);
+    }
+    /* 节拍线 */
+    .beat-line {
+      position: absolute;
+      left: 0; right: 0;
+      height: 1px;
+      background: rgba(75, 85, 99, 0.4);
+    }
+    /* 判定线（=下落区底部） */
+    .judge-line {
+      position: absolute;
+      left: 0; right: 0;
+      bottom: 0;
+      height: 2px;
+      background: linear-gradient(to right, transparent 0%, #f59e0b 20%, #f59e0b 80%, transparent 100%);
+      box-shadow: 0 0 8px #f59e0b;
+      z-index: 5;
+    }
+
+    /* 下落 key 通用 */
+    .falling-key {
+      position: absolute;
+      border-radius: 4px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+      will-change: transform;
+      pointer-events: none;
+    }
+    .falling-key.white-note { background: #60a5fa; } /* bg-blue-400 */
+    .falling-key.black-note { background: #c084fc; } /* bg-purple-400 */
+    .falling-key.waiting    { background: #facc15; animation: pulse-wait 0.8s ease-in-out infinite alternate; }
+    @keyframes pulse-wait {
+      0%   { transform: translateY(0)    scale(1);   box-shadow: 0 0 4px rgba(250,204,21,0.5); }
+      100% { transform: translateY(-3px) scale(1.03); box-shadow: 0 0 14px rgba(250,204,21,0.9); }
+    }
+
+    /* 触底 ripple */
+    .ripple {
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(59, 130, 246, 0.5);
+      pointer-events: none;
+      animation: ripple-anim 200ms ease-out forwards;
+    }
+    @keyframes ripple-anim {
+      0%   { width: 8px;  height: 8px;  opacity: 0.9; }
+      100% { width: 80px; height: 80px; opacity: 0; }
+    }
+
+    /* ========== 键盘 (108px) ========== */
+    .keyboard {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 108px;
+      background: #0f172a;
+      border-top: 2px solid #1e293b;
+    }
+    /* 键盘内部水平居中：32×37=1184，剩 16px → 左右各 8px */
+    .keyboard-inner {
+      position: absolute;
+      left: 8px;
+      top: 0;
+      width: 1184px;
+      height: 100%;
+    }
+    /* 下落区内部也用相同的左侧偏移，让下落 key 与键盘对齐 */
+    .fall-inner {
+      position: absolute;
+      left: 8px;
+      top: 0;
+      width: 1184px;
+      height: 100%;
+    }
+    .key-white {
+      position: absolute;
+      top: 0;
+      width: 37px;
+      height: 108px;
+      background: #f9fafb;
+      border: 1px solid #94a3b8;
+      border-radius: 0 0 4px 4px;
+      box-sizing: border-box;
+      color: #1f2937;
+      font-size: 9px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 4px;
+      user-select: none;
+    }
+    .key-white.c-key { color: #6b7280; font-weight: 700; }
+    .key-black {
+      position: absolute;
+      top: 0;
+      width: 22px;
+      height: 65px;
+      background: #111827;
+      border: 1px solid #000000;
+      border-radius: 0 0 3px 3px;
+      box-sizing: border-box;
+      z-index: 2;
+    }
+    .key-active-correct {
+      animation: key-correct 200ms ease-out;
+    }
+    @keyframes key-correct {
+      0%   { background: #22c55e; }
+      100% { background: inherit; }
+    }
+    .key-active-wrong-white {
+      animation: key-wrong-w 500ms ease-out;
+    }
+    @keyframes key-wrong-w {
+      0%, 50% { background: #ef4444; }
+      100%    { background: #f9fafb; }
+    }
+    .key-active-wrong-black {
+      animation: key-wrong-b 500ms ease-out;
+    }
+    @keyframes key-wrong-b {
+      0%, 50% { background: #ef4444; }
+      100%    { background: #111827; }
+    }
+    .key-active-hit-white {
+      animation: key-hit-w 200ms ease-out;
+    }
+    @keyframes key-hit-w {
+      0%   { background: #93c5fd; }
+      100% { background: #f9fafb; }
+    }
+    .key-active-hit-black {
+      animation: key-hit-b 200ms ease-out;
+    }
+    @keyframes key-hit-b {
+      0%   { background: #6366f1; }
+      100% { background: #111827; }
+    }
+
+    /* ========== 整屏错音脉冲 ========== */
+    .screen.error-flash::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border: 6px solid #ef4444;
+      border-radius: 12px;
+      pointer-events: none;
+      z-index: 100;
+      animation: error-pulse 300ms ease-out;
+    }
+    @keyframes error-pulse {
+      0%   { opacity: 0; }
+      30%  { opacity: 1; }
+      100% { opacity: 0; }
+    }
+
+    /* ========== 调试栏 ========== */
+    /* 屏幕内右上角，半透明叠加，避免遮挡信息栏关键内容 */
+    .debug-panel {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      background: rgba(0, 0, 0, 0.75);
+      padding: 4px 6px;
+      border-radius: 6px;
+      border: 1px solid #4b5563;
+      font-size: 9px;
+      color: #f3f4f6;
+      pointer-events: auto;
+    }
+    .debug-panel .debug-label {
+      color: #fbbf24;
+      font-weight: 700;
+      font-size: 8px;
+      letter-spacing: 0.5px;
+      margin-bottom: 1px;
+    }
+    .debug-btn {
+      padding: 2px 6px;
+      background: #374151;
+      border: 1px solid #4b5563;
+      color: #f3f4f6;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 9px;
+      text-align: left;
+      white-space: nowrap;
+      line-height: 1.3;
+    }
+    .debug-btn:hover { background: #4b5563; }
+    .debug-btn.active { background: #2563eb; border-color: #3b82f6; }
+    .debug-btn.sim    { background: #16a34a; }
+    .debug-btn.sim-err{ background: #dc2626; }
+
+    /* ========== 暂停遮罩 ========== */
+    .pause-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      z-index: 60;
+    }
+    .pause-overlay h2 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .pause-overlay .btn-row { display: flex; gap: 16px; }
+    .pause-btn {
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      color: #ffffff;
+    }
+    .pause-btn.resume  { background: #2563eb; }
+    .pause-btn.restart { background: #6b7280; }
+    .pause-btn.exit    { background: #dc2626; }
+
+    /* ========== 结算页 ========== */
+    .result-view {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      box-sizing: border-box;
+      z-index: 70;
+      gap: 20px;
+    }
+    .result-view .result-title {
+      font-size: 20px;
+      color: #9ca3af;
+    }
+    .result-view .score-big {
+      font-size: 90px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #f97316 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      line-height: 1;
+    }
+    .result-view .score-rank {
+      font-size: 28px;
+      font-weight: 700;
+      color: #fbbf24;
+    }
+    .result-view .stats-detail {
+      display: flex;
+      gap: 24px;
+      margin-top: 4px;
+    }
+    .stat-card {
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      padding: 8px 18px;
+      text-align: center;
+      min-width: 70px;
+    }
+    .stat-card .num { font-size: 22px; font-weight: 700; }
+    .stat-card .name { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+    .result-view .result-btn-row { display: flex; gap: 20px; margin-top: 8px; }
+    .result-btn {
+      padding: 12px 32px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      color: #ffffff;
+    }
+    .result-btn.again { background: #2563eb; }
+    .result-btn.back  { background: #4b5563; }
+
+  </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+  <div class="screen" id="screen">
+
+    <!-- ========== 信息栏 ========== -->
+    <div class="info-bar">
+      <!-- 返回 -->
+      <div class="icon-btn" id="info-back" title="返回">←</div>
+
+      <!-- 曲名+作曲家 -->
+      <div class="info-cell" style="min-width: 110px;">
+        <span class="label">曲目</span>
+        <span class="value">卡农</span>
+        <span class="label" style="font-size: 9px;">帕赫贝尔</span>
+      </div>
+
+      <!-- BPM -->
+      <div class="info-cell"><span class="label">BPM</span><span class="value">75</span></div>
+      <!-- 拍号 -->
+      <div class="info-cell"><span class="label">拍号</span><span class="value">4/4</span></div>
+      <!-- 调号 -->
+      <div class="info-cell"><span class="label">调号</span><span class="value">D</span></div>
+      <!-- 小节 -->
+      <div class="info-cell"><span class="label">小节</span><span class="value"><span id="info-bar-cur">8</span>/<span id="info-bar-total">42</span></span></div>
+
+      <!-- 进度条 -->
+      <div class="info-cell" style="min-width: 110px;">
+        <span class="label">进度</span>
+        <div class="progress-bar"><div></div></div>
+      </div>
+
+      <!-- 模式切换 -->
+      <div class="mode-pill learning" id="mode-pill">学习模式</div>
+
+      <!-- 实时统计 -->
+      <div class="stats">
+        <div class="stat-item"><span class="stat-label">完美</span><span class="stat-value stat-perfect" id="stat-perfect">0</span></div>
+        <div class="stat-item"><span class="stat-label">抢</span>  <span class="stat-value stat-early"   id="stat-early">0</span></div>
+        <div class="stat-item"><span class="stat-label">拖</span>  <span class="stat-value stat-late"    id="stat-late">0</span></div>
+        <div class="stat-item"><span class="stat-label">掉</span>  <span class="stat-value stat-miss"    id="stat-miss">0</span></div>
+        <div class="stat-item"><span class="stat-label">错</span>  <span class="stat-value stat-wrong"   id="stat-wrong">0</span></div>
+      </div>
+
+      <!-- 暂停按钮：放在统计后面，调试栏占住右上角 -->
+      <div class="icon-btn" id="info-pause" title="暂停" style="margin-left: 8px; margin-right: 150px;">⏸</div>
+    </div>
+
+    <!-- ========== 下落区 ========== -->
+    <div class="fall-area" id="fall-area">
+      <div class="fall-inner" id="fall-inner">
+        <!-- 节拍线（每秒一道） -->
+        <div class="beat-line" style="top: 87px;"></div>
+        <div class="beat-line" style="top: 175px;"></div>
+        <div class="beat-line" style="top: 263px;"></div>
+        <!-- 下落 key 由 JS 动态插入 -->
+      </div>
+      <!-- 判定线（同时也是键盘顶部）跨满下落区 -->
+      <div class="judge-line"></div>
+    </div>
+
+    <!-- ========== 键盘 ========== -->
+    <div class="keyboard">
+      <div class="keyboard-inner" id="keyboard-inner">
+        <!-- 32 个白键 + 对应黑键由 JS 生成 -->
+      </div>
+    </div>
+
+    <!-- ========== 调试栏 ========== -->
+    <div class="debug-panel">
+      <div class="debug-label">原型调试用</div>
+      <button class="debug-btn active" data-state="1">1.学习-等待</button>
+      <button class="debug-btn"        data-state="2">2.学习-按错</button>
+      <button class="debug-btn"        data-state="3">3.演奏-推进</button>
+      <button class="debug-btn"        data-state="4">4.暂停遮罩</button>
+      <button class="debug-btn"        data-state="5">5.结算页</button>
+      <div style="height: 4px;"></div>
+      <button class="debug-btn sim"     id="sim-correct">模拟按对</button>
+      <button class="debug-btn sim-err" id="sim-wrong">模拟按错</button>
+    </div>
+
+    <!-- ========== 暂停遮罩 ========== -->
+    <div class="pause-overlay" id="pause-overlay" style="display: none;">
+      <h2>已暂停</h2>
+      <div class="btn-row">
+        <button class="pause-btn resume"  id="pause-resume">▶ 继续</button>
+        <button class="pause-btn restart" id="pause-restart">↻ 重新开始</button>
+        <button class="pause-btn exit"    id="pause-exit">✕ 退出</button>
+      </div>
+    </div>
+
+    <!-- ========== 结算页 ========== -->
+    <div class="result-view" id="result-view" style="display: none;">
+      <div class="result-title">演奏完成</div>
+      <div class="score-big">87<span style="font-size: 36px;">%</span></div>
+      <div class="score-rank">评级 A</div>
+      <div class="stats-detail">
+        <div class="stat-card"><div class="num stat-perfect">42</div><div class="name">完美</div></div>
+        <div class="stat-card"><div class="num stat-early">5</div>  <div class="name">抢</div></div>
+        <div class="stat-card"><div class="num stat-late">3</div>   <div class="name">拖</div></div>
+        <div class="stat-card"><div class="num stat-miss">2</div>   <div class="name">掉</div></div>
+        <div class="stat-card"><div class="num stat-wrong">4</div>  <div class="name">错</div></div>
+      </div>
+      <div class="result-btn-row">
+        <button class="result-btn again" id="result-again">↻ 再来一次</button>
+        <button class="result-btn back"  id="result-back">← 返回库</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    'use strict';
+
+    // ========== 常量 ==========
+    const SCREEN_W = 1200;
+    const SCREEN_H = 540;
+    const INFO_H = 81;
+    const FALL_H = 351;
+    const KB_H = 108;
+    const WHITE_W = 37;
+    const BLACK_W = 22;
+    const FALL_SPEED = 234;          // px/s
+    const TRAVEL_TIME = FALL_H / FALL_SPEED; // 1.5s 从顶到判定线
+    const LOOP_MS = 4000;            // 4 秒一循环
+
+    // mock 谱（设计文档 4.4 节）
+    const MOCK_NOTES = [
+      { t: 0,    d: 400, pitch: 60 },
+      { t: 500,  d: 400, pitch: 62 },
+      { t: 1000, d: 400, pitch: 64 },
+      { t: 1500, d: 400, pitch: 65 },
+      { t: 2000, d: 400, pitch: 67 },
+      { t: 2500, d: 400, pitch: 69 },
+      { t: 3000, d: 400, pitch: 71 },
+      { t: 3500, d: 400, pitch: 72 },
+    ];
+
+    // ========== 键盘构建 ==========
+    // 32 键视口起始音 = C3 (MIDI 48)
+    const KB_START_PITCH = 48;
+    const NUM_WHITE = 32;
+    // 白键音名（在一八度内 7 个）
+    const WHITE_PITCH_CLASS = [0, 2, 4, 5, 7, 9, 11]; // C D E F G A B
+    const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+    // 把 32 白键的 pitch 列表算出来
+    const whitePitches = []; // 长度 32
+    {
+      let octave = Math.floor(KB_START_PITCH / 12);
+      let pcIdx = WHITE_PITCH_CLASS.indexOf(KB_START_PITCH % 12);
+      if (pcIdx < 0) pcIdx = 0;
+      for (let i = 0; i < NUM_WHITE; i++) {
+        whitePitches.push(octave * 12 + WHITE_PITCH_CLASS[pcIdx]);
+        pcIdx++;
+        if (pcIdx >= 7) { pcIdx = 0; octave++; }
+      }
+    }
+    // 反向映射：pitch -> 白键索引（仅白键有效）
+    const pitchToWhiteIdx = new Map();
+    whitePitches.forEach((p, i) => pitchToWhiteIdx.set(p, i));
+
+    // pitch -> 视口 x（左边界）
+    function pitchToX(pitch) {
+      // 黑键则取左邻白键的右边界向左偏
+      const pc = pitch % 12;
+      const isBlack = [1, 3, 6, 8, 10].includes(pc);
+      if (!isBlack) {
+        return pitchToWhiteIdx.get(pitch) * WHITE_W;
+      } else {
+        const leftWhitePitch = pitch - 1;
+        const idx = pitchToWhiteIdx.get(leftWhitePitch);
+        if (idx === undefined) return 0;
+        return idx * WHITE_W + WHITE_W - BLACK_W / 2;
+      }
+    }
+    function isBlackPitch(p) { return [1, 3, 6, 8, 10].includes(p % 12); }
+    function pitchToKeyWidth(p) { return isBlackPitch(p) ? BLACK_W : WHITE_W; }
+
+    // 构建键盘 DOM
+    const keyboardEl = document.getElementById('keyboard-inner');
+    const keyEls = new Map(); // pitch -> element
+    {
+      // 先白键
+      for (let i = 0; i < NUM_WHITE; i++) {
+        const p = whitePitches[i];
+        const el = document.createElement('div');
+        el.className = 'key-white' + ((p % 12 === 0) ? ' c-key' : '');
+        el.style.left = (i * WHITE_W) + 'px';
+        el.dataset.pitch = p;
+        if (p % 12 === 0) el.textContent = NOTE_NAMES[0] + Math.floor(p / 12 - 1);
+        keyboardEl.appendChild(el);
+        keyEls.set(p, el);
+      }
+      // 再黑键
+      for (let i = 0; i < NUM_WHITE - 1; i++) {
+        const wp = whitePitches[i];
+        const nextWp = whitePitches[i + 1];
+        // 如果间隔=2（有黑键），则在 wp+1 处插入黑键
+        if (nextWp - wp === 2) {
+          const bp = wp + 1;
+          const el = document.createElement('div');
+          el.className = 'key-black';
+          el.style.left = (i * WHITE_W + WHITE_W - BLACK_W / 2) + 'px';
+          el.dataset.pitch = bp;
+          keyboardEl.appendChild(el);
+          keyEls.set(bp, el);
+        }
+      }
+    }
+
+    // ========== 状态机 ==========
+    const STATE = {
+      LEARNING_WAIT: 1,
+      LEARNING_WRONG: 2,
+      PERFORMANCE: 3,
+      PAUSED: 4,
+      RESULT: 5,
+    };
+    let currentState = STATE.LEARNING_WAIT;
+    let currentMode = 'learning'; // learning | performance
+    let isPaused = false;
+    let stats = { perfect: 0, early: 0, late: 0, miss: 0, wrong: 0 };
+
+    // ========== 下落动画 ==========
+    const fallArea = document.getElementById('fall-inner');
+    // 每个 note 有一个 DOM，循环重复使用
+    // 我们简单做法：每帧扫描 8 个 note，按 (now % LOOP_MS) 决定它的 Y
+    const noteEls = []; // 与 MOCK_NOTES 同序
+    MOCK_NOTES.forEach((n) => {
+      const el = document.createElement('div');
+      const isBlack = isBlackPitch(n.pitch);
+      el.className = 'falling-key ' + (isBlack ? 'black-note' : 'white-note');
+      const w = pitchToKeyWidth(n.pitch);
+      el.style.width = w + 'px';
+      // key 高度按 duration * speed
+      const h = Math.max(16, (n.d / 1000) * FALL_SPEED);
+      el.style.height = h + 'px';
+      el.style.left = pitchToX(n.pitch) + 'px';
+      el.style.transform = 'translateY(-1000px)'; // 先藏起来
+      fallArea.appendChild(el);
+      noteEls.push({ el, height: h });
+    });
+
+    // 触底 ripple
+    function spawnRipple(pitch) {
+      const x = pitchToX(pitch) + pitchToKeyWidth(pitch) / 2;
+      const r = document.createElement('div');
+      r.className = 'ripple';
+      r.style.left = (x - 40) + 'px';
+      r.style.top  = (FALL_H - 40) + 'px';
+      fallArea.appendChild(r);
+      setTimeout(() => r.remove(), 220);
+    }
+
+    // 键面高亮
+    function highlightKey(pitch, kind) {
+      const el = keyEls.get(pitch);
+      if (!el) return;
+      const isBlack = isBlackPitch(pitch);
+      let cls;
+      if (kind === 'correct') cls = 'key-active-correct';
+      else if (kind === 'wrong') cls = isBlack ? 'key-active-wrong-black' : 'key-active-wrong-white';
+      else if (kind === 'hit')   cls = isBlack ? 'key-active-hit-black'   : 'key-active-hit-white';
+      else return;
+      el.classList.remove(cls);
+      void el.offsetWidth; // restart animation
+      el.classList.add(cls);
+      const dur = (kind === 'wrong') ? 500 : 200;
+      setTimeout(() => el.classList.remove(cls), dur + 20);
+    }
+
+    // 错音整屏脉冲
+    function flashError() {
+      const sc = document.getElementById('screen');
+      sc.classList.remove('error-flash');
+      void sc.offsetWidth;
+      sc.classList.add('error-flash');
+      setTimeout(() => sc.classList.remove('error-flash'), 320);
+    }
+
+    // 下落主循环（RAF）
+    let loopStartTs = performance.now();
+    // 学习模式"等待"标记：当 currentState = LEARNING_WAIT 时，第一个 key 的 t（这里选 t=2000，G4）作为等待 key
+    const WAIT_NOTE_INDEX = 4; // G4，刚好循环中段，可见性最好
+    let pausedAt = 0; // 暂停起始 ts，用于补偿
+    let pausedAccum = 0; // 累计暂停时长
+
+    // 跟踪每个 note 上一帧是否已"触底"，避免重复触发触底反馈
+    const noteTriggered = new Array(MOCK_NOTES.length).fill(false);
+
+    function tick(now) {
+      if (!isPaused) {
+        const elapsed = (now - loopStartTs - pausedAccum) % LOOP_MS;
+
+        MOCK_NOTES.forEach((note, i) => {
+          const { el, height } = noteEls[i];
+          // 计算"虚拟"时间：相对于本循环
+          // note 从顶部开始下落的时刻 = note.t（毫秒）
+          // 当 elapsed = note.t 时，key 的底部恰好出现在 y=0
+          // 当 elapsed = note.t + TRAVEL_TIME*1000 时，key 的底部到达判定线 y=FALL_H
+          const localT = (elapsed - note.t) / 1000; // 秒
+          const yBottom = localT * FALL_SPEED; // key 底部相对下落区顶部
+
+          // 学习模式等待逻辑：
+          // 让 WAIT_NOTE_INDEX 这条 note 在到达判定线后停留
+          const isLearnWaiting =
+            (currentState === STATE.LEARNING_WAIT || currentState === STATE.LEARNING_WRONG)
+            && i === WAIT_NOTE_INDEX;
+
+          if (localT < 0 || localT > 2.5) {
+            // 还没出现 或 已经过判定线很久 → 隐藏
+            el.style.transform = 'translateY(-1000px)';
+            el.classList.remove('waiting');
+            noteTriggered[i] = false;
+            return;
+          }
+
+          // yBottom = key 底部位置；key 顶部 = yBottom - height
+          let yTop = yBottom - height;
+
+          if (yBottom >= FALL_H) {
+            // 已触底
+            if (isLearnWaiting) {
+              // 停在判定线上，呈黄色等待
+              el.classList.add('waiting');
+              // 把 key 完整停在键面正上方
+              yTop = FALL_H - height - 2;
+              el.style.transform = `translateY(${yTop}px)`;
+            } else {
+              // 演奏模式：触发一次触底反馈后立刻消失
+              if (!noteTriggered[i]) {
+                noteTriggered[i] = true;
+                if (currentMode === 'performance' && currentState === STATE.PERFORMANCE) {
+                  spawnRipple(note.pitch);
+                  highlightKey(note.pitch, 'hit');
+                  // 随机递增统计
+                  const r = Math.random();
+                  if (r < 0.7)      stats.perfect++;
+                  else if (r < 0.8) stats.early++;
+                  else if (r < 0.9) stats.late++;
+                  else if (r < 0.95) stats.miss++;
+                  else              stats.wrong++;
+                  renderStats();
+                } else if (currentMode === 'learning') {
+                  // 学习模式非等待 key 也用 hit 略示意
+                  spawnRipple(note.pitch);
+                }
+              }
+              el.classList.remove('waiting');
+              el.style.transform = 'translateY(-1000px)';
+            }
+          } else {
+            // 正常下落
+            el.classList.remove('waiting');
+            noteTriggered[i] = false;
+            el.style.transform = `translateY(${yTop}px)`;
+          }
+        });
+      }
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    // ========== 状态切换 ==========
+    function setState(s) {
+      currentState = s;
+      // 更新按钮 active
+      document.querySelectorAll('.debug-btn[data-state]').forEach(b => {
+        b.classList.toggle('active', Number(b.dataset.state) === s);
+      });
+
+      const pauseEl = document.getElementById('pause-overlay');
+      const resEl   = document.getElementById('result-view');
+      pauseEl.style.display = 'none';
+      resEl.style.display = 'none';
+      isPaused = false;
+
+      if (s === STATE.LEARNING_WAIT) {
+        setMode('learning');
+      } else if (s === STATE.LEARNING_WRONG) {
+        setMode('learning');
+        // 触发一次错音反馈
+        flashError();
+        // 高亮 mock 一个错键（取一个白键 E4=64）
+        highlightKey(64, 'wrong');
+      } else if (s === STATE.PERFORMANCE) {
+        setMode('performance');
+      } else if (s === STATE.PAUSED) {
+        isPaused = true;
+        pausedAt = performance.now();
+        pauseEl.style.display = 'flex';
+      } else if (s === STATE.RESULT) {
+        isPaused = true;
+        resEl.style.display = 'flex';
+      }
+    }
+
+    function setMode(m) {
+      currentMode = m;
+      const pill = document.getElementById('mode-pill');
+      if (m === 'learning') {
+        pill.textContent = '学习模式';
+        pill.classList.add('learning');
+        pill.classList.remove('performance');
+      } else {
+        pill.textContent = '演奏模式';
+        pill.classList.add('performance');
+        pill.classList.remove('learning');
+      }
+    }
+
+    function renderStats() {
+      document.getElementById('stat-perfect').textContent = stats.perfect;
+      document.getElementById('stat-early').textContent   = stats.early;
+      document.getElementById('stat-late').textContent    = stats.late;
+      document.getElementById('stat-miss').textContent    = stats.miss;
+      document.getElementById('stat-wrong').textContent   = stats.wrong;
+    }
+
+    // ========== 事件绑定 ==========
+    // 调试栏 5 状态
+    document.querySelectorAll('.debug-btn[data-state]').forEach(b => {
+      b.addEventListener('click', () => setState(Number(b.dataset.state)));
+    });
+
+    // 模拟按对/按错
+    document.getElementById('sim-correct').addEventListener('click', () => {
+      // 取 WAIT note 的 pitch
+      const p = MOCK_NOTES[WAIT_NOTE_INDEX].pitch;
+      highlightKey(p, 'correct');
+      spawnRipple(p);
+    });
+    document.getElementById('sim-wrong').addEventListener('click', () => {
+      flashError();
+      // 错按相邻白键
+      const wrongPitch = MOCK_NOTES[WAIT_NOTE_INDEX].pitch + 2;
+      highlightKey(wrongPitch, 'wrong');
+      stats.wrong++;
+      renderStats();
+    });
+
+    // 模式切换 pill
+    document.getElementById('mode-pill').addEventListener('click', () => {
+      setMode(currentMode === 'learning' ? 'performance' : 'learning');
+    });
+
+    // 暂停按钮
+    document.getElementById('info-pause').addEventListener('click', () => setState(STATE.PAUSED));
+
+    // 返回按钮
+    document.getElementById('info-back').addEventListener('click', () => {
+      console.log('nav: library');
+    });
+
+    // 暂停遮罩三按钮
+    document.getElementById('pause-resume').addEventListener('click', () => {
+      // 补偿暂停时长
+      pausedAccum += performance.now() - pausedAt;
+      setState(currentMode === 'learning' ? STATE.LEARNING_WAIT : STATE.PERFORMANCE);
+    });
+    document.getElementById('pause-restart').addEventListener('click', () => {
+      console.log('restart');
+      stats = { perfect: 0, early: 0, late: 0, miss: 0, wrong: 0 };
+      renderStats();
+      loopStartTs = performance.now();
+      pausedAccum = 0;
+      setState(currentMode === 'learning' ? STATE.LEARNING_WAIT : STATE.PERFORMANCE);
+    });
+    document.getElementById('pause-exit').addEventListener('click', () => {
+      console.log('nav: library');
+    });
+
+    // 结算页两按钮
+    document.getElementById('result-again').addEventListener('click', () => {
+      console.log('restart');
+      stats = { perfect: 0, early: 0, late: 0, miss: 0, wrong: 0 };
+      renderStats();
+      loopStartTs = performance.now();
+      pausedAccum = 0;
+      setState(STATE.LEARNING_WAIT);
+    });
+    document.getElementById('result-back').addEventListener('click', () => {
+      console.log('nav: library');
+    });
+
+    // 初始化
+    setState(STATE.LEARNING_WAIT);
+    renderStats();
+  </script>
+
+  <!--
+  ========== 元素清单 ==========
+
+  | 编号 | 名称 | 类型 | 状态 | 行为 |
+  |---|---|---|---|---|
+  | PLY-01 | 屏幕容器 | div.screen | 静态 | 1200x540 固定屏幕模拟 |
+  | PLY-02 | 信息栏 | div.info-bar | 静态 | 高 81px，承载所有信息控件 |
+  | PLY-03 | 返回按钮 | IconButton | 默认/按下 | 点击 → console.log("nav: library") |
+  | PLY-04 | 曲名+作曲家 | 文本 | 静态 | "卡农 / 帕赫贝尔" |
+  | PLY-05 | BPM 显示 | 文本 | 静态 | "75" |
+  | PLY-06 | 拍号显示 | 文本 | 静态 | "4/4" |
+  | PLY-07 | 调号显示 | 文本 | 静态 | "D" |
+  | PLY-08 | 小节计数 | 文本 | 静态 | "8/42" |
+  | PLY-09 | 进度条 | 进度条 | 静态 | 当前 38% |
+  | PLY-10 | 模式切换 pill | Button | 学习/演奏 | 点击切换两种模式 |
+  | PLY-11 | 实时统计-完美 | 文本 | 动态 | 演奏模式下随触底随机递增 |
+  | PLY-12 | 实时统计-抢 | 文本 | 动态 | 同上 |
+  | PLY-13 | 实时统计-拖 | 文本 | 动态 | 同上 |
+  | PLY-14 | 实时统计-掉 | 文本 | 动态 | 同上 |
+  | PLY-15 | 实时统计-错 | 文本 | 动态 | 同上，"模拟按错"也会触发 |
+  | PLY-16 | 暂停按钮 | IconButton | 默认/按下 | 点击 → 切换到状态 4（暂停遮罩） |
+  | PLY-17 | 下落区 | div.fall-area | 静态 | 高 351px，承载下落 key |
+  | PLY-18 | 节拍线 | 横线 | 静态 | 3 条灰色辅助参考线 |
+  | PLY-19 | 判定线 | 横线 | 静态 | 下落区底部黄色发光线 y=432 |
+  | PLY-20 | 下落 key | div.falling-key | 多状态 | 蓝(白键音)/紫(黑键音)/黄(等待) |
+  | PLY-21 | 触底 ripple | div.ripple | 200ms 动画 | 触底圆形扩散 |
+  | PLY-22 | 键盘容器 | div.keyboard | 静态 | 高 108px，底部 |
+  | PLY-23 | 白键 | div.key-white | 默认/绿(对)/红(错)/蓝(hit) | 32 个，宽 37px |
+  | PLY-24 | 黑键 | div.key-black | 默认/红(错)/紫(hit) | 黑键，宽 22px 高 65px |
+  | PLY-25 | C 键标签 | 文本 | 静态 | 白键 C 显示 C2/C3/C4/C5/C6 等 |
+  | PLY-26 | 整屏错音脉冲 | 边框动画 | 300ms | "模拟按错" / 状态 2 触发 |
+  | PLY-27 | 调试栏 | 浮层 | 静态 | 屏幕外右侧，原型期专用 |
+  | PLY-28 | 状态按钮 1-5 | Button | active/idle | 切换 5 状态 |
+  | PLY-29 | 模拟按对按钮 | Button | 点击 | 高亮 + ripple，不计统计 |
+  | PLY-30 | 模拟按错按钮 | Button | 点击 | 整屏脉冲 + 红色键位 + 错计数+1 |
+  | PLY-31 | 暂停遮罩 | div.pause-overlay | 显示/隐藏 | 状态 4 时显示 |
+  | PLY-32 | 继续按钮 | Button | 点击 | 关闭遮罩、恢复动画 |
+  | PLY-33 | 重新开始按钮 | Button | 点击 | console.log("restart") + 清零统计 |
+  | PLY-34 | 退出按钮 | Button | 点击 | console.log("nav: library") |
+  | PLY-35 | 结算页 | div.result-view | 显示/隐藏 | 状态 5 时显示 |
+  | PLY-36 | 综合得分 | 大数字 | 静态 | 87% + 评级 A |
+  | PLY-37 | 结算统计明细 | 5 卡片 | 静态 | 完美 42 / 抢 5 / 拖 3 / 掉 2 / 错 4 |
+  | PLY-38 | 再来一次按钮 | Button | 点击 | console.log("restart") + 重置 |
+  | PLY-39 | 返回库按钮 | Button | 点击 | console.log("nav: library") |
+  | PLY-40 | 循环下落动画 | RAF 驱动 | 4s 循环 | 8 拍 mock 数据 234 px/s 下落 |
+  -->
+
+</body>
+</html>

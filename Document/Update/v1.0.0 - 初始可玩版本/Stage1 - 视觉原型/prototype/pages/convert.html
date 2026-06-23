@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>键落钢琴 - 转换页</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html, body { margin: 0; padding: 0; overflow: hidden; }
+    body {
+      background: #f3f4f6;
+      font-family: system-ui, sans-serif;
+    }
+    .screen {
+      width: 1200px;
+      height: 540px;
+      background: #111827;
+      color: #f9fafb;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 10px 40px rgba(0,0,0,.2);
+      border-radius: 12px;
+    }
+    /* 屏幕内不允许滚动 */
+    .screen *::-webkit-scrollbar { width: 6px; height: 6px; }
+    .screen *::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+
+    /* toast 动画 */
+    @keyframes toastIn {
+      0% { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }
+      100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    }
+    .toast-anim { animation: toastIn 0.18s ease-out; }
+
+    /* modal 背景 */
+    .modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+
+    .hidden-state { display: none !important; }
+  </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+  <div class="screen">
+
+    <!-- ============ 调试栏（原型期专用） ============ -->
+    <div id="cvt-debug-bar"
+         class="absolute top-2 right-2 z-40 flex items-center gap-1 bg-gray-800/90 px-2 py-1 rounded-md border border-gray-600 text-xs">
+      <span class="text-gray-400 mr-1">原型调试用</span>
+      <button data-state="A" class="cvt-debug-btn px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-white">A 未选</button>
+      <button data-state="B" class="cvt-debug-btn px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-white">B 多轨</button>
+      <button data-state="C" class="cvt-debug-btn px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-white">C 预览</button>
+      <button data-state="D" class="cvt-debug-btn px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-white">D 保存</button>
+      <button data-state="E" class="cvt-debug-btn px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-white">E 异常</button>
+    </div>
+
+    <!-- ============ 顶部 AppBar（公共） ============ -->
+    <div class="absolute top-0 left-0 right-0 h-12 flex items-center px-5 border-b border-gray-700 bg-gray-900">
+      <button id="cvt-back-btn" class="text-gray-300 hover:text-white text-xl mr-3" title="返回">←</button>
+      <span class="text-base font-semibold text-gray-100">从 MIDI 文件创建</span>
+      <span id="cvt-state-label" class="ml-3 text-xs text-gray-500">状态 A · 未选文件</span>
+    </div>
+
+    <!-- ============ 状态 A：未选文件 ============ -->
+    <div id="cvt-state-a" class="absolute inset-0 pt-12 flex flex-col items-center justify-center">
+      <button id="cvt-pick-file-btn"
+              class="px-10 py-6 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-2xl font-semibold shadow-lg transition">
+        📁 选择 MIDI 文件
+      </button>
+      <p class="mt-6 text-gray-400 text-sm">支持 SMF 格式 0 与 1,单字节编码</p>
+      <p class="mt-2 text-gray-500 text-xs">点击按钮选择 .mid / .midi 文件</p>
+    </div>
+
+    <!-- ============ 状态 B:已选文件,多轨 ============ -->
+    <div id="cvt-state-b" class="absolute inset-0 pt-12 hidden-state flex-col">
+      <!-- 文件 banner -->
+      <div class="px-6 pt-3 pb-2 bg-gray-800/60 border-b border-gray-700">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">🎵</span>
+            <span class="text-gray-100 font-medium" id="cvt-b-filename">Canon_in_D.mid</span>
+            <span class="text-gray-400 text-xs" id="cvt-b-filesize">(12.3 KB)</span>
+          </div>
+          <span class="text-emerald-400 text-xs" id="cvt-b-format">已识别:SMF 格式 1,3 轨道</span>
+        </div>
+        <p class="mt-1 text-gray-500 text-xs">请选择一条作为「旋律轨」</p>
+      </div>
+
+      <!-- 轨道列表 -->
+      <div class="px-6 py-3 flex-1 overflow-y-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-gray-400 text-xs border-b border-gray-700">
+              <th class="text-left py-2 w-10"></th>
+              <th class="text-left py-2 w-14">轨号</th>
+              <th class="text-left py-2 w-14">通道</th>
+              <th class="text-left py-2 w-20">note 数</th>
+              <th class="text-left py-2 w-24">平均音域</th>
+              <th class="text-left py-2">通道乐器</th>
+            </tr>
+          </thead>
+          <tbody id="cvt-b-track-list">
+            <!-- 动态注入 -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 底部操作 -->
+      <div class="px-6 py-3 border-t border-gray-700 bg-gray-900 flex justify-between items-center">
+        <span id="cvt-b-hint" class="text-gray-500 text-xs">未选择轨道</span>
+        <button id="cvt-b-next-btn"
+                class="px-5 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed"
+                disabled>
+          下一步:预览
+        </button>
+      </div>
+    </div>
+
+    <!-- ============ 状态 C:预览 ============ -->
+    <div id="cvt-state-c" class="absolute inset-0 pt-12 hidden-state flex-col">
+      <div class="px-6 py-3 flex-1 overflow-y-auto">
+        <!-- 曲名/作曲家输入 -->
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">曲名</label>
+            <input type="text" id="cvt-c-title"
+                   value="Canon in D"
+                   class="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-700 text-gray-100 text-sm focus:border-blue-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">作曲家</label>
+            <input type="text" id="cvt-c-composer"
+                   value="Pachelbel"
+                   class="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-700 text-gray-100 text-sm focus:border-blue-500 focus:outline-none">
+          </div>
+        </div>
+
+        <!-- 元信息卡 -->
+        <div class="mt-3 grid grid-cols-4 gap-2">
+          <div class="bg-gray-800 rounded-md p-2 text-center">
+            <div class="text-gray-400 text-xs">BPM</div>
+            <div class="text-gray-100 text-lg font-semibold" id="cvt-c-bpm">75</div>
+          </div>
+          <div class="bg-gray-800 rounded-md p-2 text-center">
+            <div class="text-gray-400 text-xs">拍号</div>
+            <div class="text-gray-100 text-lg font-semibold" id="cvt-c-timesig">4/4</div>
+          </div>
+          <div class="bg-gray-800 rounded-md p-2 text-center">
+            <div class="text-gray-400 text-xs">调号</div>
+            <div class="text-gray-100 text-lg font-semibold" id="cvt-c-keysig">D</div>
+          </div>
+          <div class="bg-gray-800 rounded-md p-2 text-center">
+            <div class="text-gray-400 text-xs">总时长</div>
+            <div class="text-gray-100 text-lg font-semibold" id="cvt-c-duration">04:45</div>
+          </div>
+        </div>
+
+        <!-- 缩略图区:前 8 拍下落预览 SVG -->
+        <div class="mt-3">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs text-gray-400">前 8 拍下落预览</span>
+            <span class="text-xs text-gray-500">(缩略图,实际下落见播放器)</span>
+          </div>
+          <div class="bg-gray-800 rounded-md p-2 border border-gray-700">
+            <svg viewBox="0 0 800 120" class="w-full" preserveAspectRatio="none" style="height: 120px;">
+              <!-- 背景网格 -->
+              <defs>
+                <pattern id="cvtCGrid" width="100" height="30" patternUnits="userSpaceOnUse">
+                  <path d="M 100 0 L 0 0 0 30" fill="none" stroke="#374151" stroke-width="0.5"/>
+                </pattern>
+              </defs>
+              <rect width="800" height="120" fill="url(#cvtCGrid)" />
+              <!-- 判定线 -->
+              <line x1="0" y1="110" x2="800" y2="110" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4,3" />
+              <!-- 8 个下落音符 (C D E F G A B C 上行) -->
+              <rect x="40"  y="20" width="60" height="85" rx="4" fill="#60a5fa" />
+              <rect x="130" y="30" width="60" height="75" rx="4" fill="#60a5fa" />
+              <rect x="220" y="40" width="60" height="65" rx="4" fill="#60a5fa" />
+              <rect x="310" y="50" width="60" height="55" rx="4" fill="#a78bfa" />
+              <rect x="400" y="55" width="60" height="50" rx="4" fill="#60a5fa" />
+              <rect x="490" y="60" width="60" height="45" rx="4" fill="#60a5fa" />
+              <rect x="580" y="65" width="60" height="40" rx="4" fill="#60a5fa" />
+              <rect x="670" y="70" width="60" height="35" rx="4" fill="#60a5fa" />
+              <!-- 拍标 -->
+              <text x="70"  y="15" fill="#9ca3af" font-size="9" text-anchor="middle">1</text>
+              <text x="160" y="15" fill="#9ca3af" font-size="9" text-anchor="middle">2</text>
+              <text x="250" y="15" fill="#9ca3af" font-size="9" text-anchor="middle">3</text>
+              <text x="340" y="15" fill="#9ca3af" font-size="9" text-anchor="middle">4</text>
+              <text x="430" y="15" fill="#9ca3af" font-size="9" text-anchor="middle">5</text>
+              <text x="520" y="15" fill="#9ca3af" font-size="9" text-anchor="middle">6</text>
+              <text x="610" y="15" fill="#9ca3af" font-size="9" text-anchor="middle">7</text>
+              <text x="700" y="15" fill="#9ca3af" font-size="9" text-anchor="middle">8</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部操作 -->
+      <div class="px-6 py-3 border-t border-gray-700 bg-gray-900 flex justify-between items-center">
+        <button id="cvt-c-prev-btn"
+                class="px-4 py-2 rounded-md bg-gray-700 hover:bg-gray-600 text-gray-100 text-sm">
+          上一步
+        </button>
+        <button id="cvt-c-next-btn"
+                class="px-5 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium">
+          下一步:保存
+        </button>
+      </div>
+    </div>
+
+    <!-- ============ 状态 D:保存 ============ -->
+    <div id="cvt-state-d" class="absolute inset-0 pt-12 hidden-state flex-col">
+      <div class="px-6 py-6 flex-1 flex flex-col items-center justify-center">
+        <div class="w-full max-w-md bg-gray-800 rounded-lg p-6 border border-gray-700">
+          <div class="flex items-center gap-2 mb-4">
+            <span class="text-2xl">💾</span>
+            <span class="text-gray-100 font-semibold">保存为 DK 谱</span>
+          </div>
+          <label class="block text-xs text-gray-400 mb-1">文件名</label>
+          <input type="text" id="cvt-d-filename"
+                 value="Canon in D"
+                 class="w-full px-3 py-2 rounded-md bg-gray-900 border border-gray-700 text-gray-100 text-sm focus:border-blue-500 focus:outline-none">
+          <p class="mt-3 text-gray-400 text-xs flex items-center gap-1">
+            <span>📂</span>
+            <span>保存到 App 私有目录</span>
+          </p>
+          <p class="mt-1 text-gray-500 text-xs">/Android/data/com.keydrop.piano/files/scores/</p>
+        </div>
+      </div>
+
+      <!-- 底部操作 -->
+      <div class="px-6 py-3 border-t border-gray-700 bg-gray-900 flex justify-between items-center">
+        <button id="cvt-d-cancel-btn"
+                class="px-4 py-2 rounded-md bg-gray-700 hover:bg-gray-600 text-gray-100 text-sm">
+          取消
+        </button>
+        <button id="cvt-d-confirm-btn"
+                class="px-5 py-2 rounded-md bg-green-600 hover:bg-green-500 text-white text-sm font-medium">
+          确认保存
+        </button>
+      </div>
+    </div>
+
+    <!-- ============ 异常弹窗 E:不支持/损坏 ============ -->
+    <div id="cvt-modal-e" class="modal-backdrop hidden-state">
+      <div class="bg-gray-800 rounded-lg p-6 w-[420px] border border-red-500/40 shadow-xl">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="text-red-400 text-xl">⚠</span>
+          <h2 class="text-gray-100 font-semibold text-lg">无法导入</h2>
+        </div>
+
+        <!-- 文案切换 radio -->
+        <div class="text-xs text-gray-400 mb-2">原型调试:选择展示文案</div>
+        <div class="space-y-1 mb-3 text-sm">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="cvt-e-msg" value="format2" checked class="cvt-e-radio">
+            <span class="text-gray-300">不支持的 SMF 格式</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="cvt-e-msg" value="corrupted" class="cvt-e-radio">
+            <span class="text-gray-300">文件已损坏</span>
+          </label>
+        </div>
+
+        <!-- 实际显示的错误文案 -->
+        <div class="bg-gray-900/70 rounded-md p-3 mb-4 border border-gray-700">
+          <p id="cvt-e-message" class="text-gray-100 text-sm leading-relaxed">
+            此文件为 SMF 格式 2,v1.0.0 仅支持格式 0/1。
+          </p>
+        </div>
+
+        <div class="flex justify-end">
+          <button id="cvt-e-ok-btn"
+                  class="px-5 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium">
+            知道了
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ Toast(保存成功) ============ -->
+    <div id="cvt-toast" class="hidden-state absolute left-1/2 top-1/2 z-60 toast-anim">
+      <div class="bg-emerald-600 text-white px-6 py-3 rounded-lg shadow-2xl flex items-center gap-2">
+        <span class="text-xl">✓</span>
+        <span class="font-medium">已保存</span>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ==================== mock 数据 ====================
+    const MOCK_MIDI_FILE = {
+      name: "Canon_in_D.mid",
+      sizeKB: 12.3,
+      format: "SMF 格式 1,3 轨道",
+      tracks: [
+        { id: 1, channel: 0, noteCount: 240, avgPitchRange: "C3-G5", instrument: "Acoustic Grand Piano" },
+        { id: 2, channel: 1, noteCount: 320, avgPitchRange: "C2-C4", instrument: "Acoustic Grand Piano" },
+        { id: 3, channel: 9, noteCount: 80,  avgPitchRange: "-",     instrument: "Drums" },
+      ],
+      meta: { title: "Canon in D", composer: "Pachelbel", bpm: 75, timeSignature: "4/4", keySignature: "D", totalDurationMs: 285000 },
+    };
+
+    const ERROR_MESSAGES = {
+      format2:   "此文件为 SMF 格式 2,v1.0.0 仅支持格式 0/1。",
+      corrupted: "文件已损坏:在 chunk header 处读取失败。",
+    };
+
+    // ==================== 工具函数 ====================
+    function formatDuration(ms) {
+      const total = Math.floor(ms / 1000);
+      const mm = String(Math.floor(total / 60)).padStart(2, "0");
+      const ss = String(total % 60).padStart(2, "0");
+      return mm + ":" + ss;
+    }
+
+    const STATE_LABELS = {
+      A: "状态 A · 未选文件",
+      B: "状态 B · 已选文件,多轨",
+      C: "状态 C · 预览",
+      D: "状态 D · 保存",
+      E: "状态 E · 异常弹窗",
+    };
+
+    // 当前所选轨道 id(状态 B 用)
+    let selectedTrackId = null;
+
+    // ==================== 渲染轨道列表 ====================
+    function renderTracks() {
+      const tbody = document.getElementById("cvt-b-track-list");
+      tbody.innerHTML = "";
+      MOCK_MIDI_FILE.tracks.forEach(t => {
+        const tr = document.createElement("tr");
+        tr.className = "border-b border-gray-800 hover:bg-gray-800/40 cursor-pointer transition";
+        tr.innerHTML =
+          '<td class="py-2"><input type="radio" name="cvt-b-track" value="' + t.id + '" class="cvt-b-track-radio accent-blue-500"></td>' +
+          '<td class="py-2 text-gray-100">#' + t.id + '</td>' +
+          '<td class="py-2 text-gray-300">ch.' + t.channel + '</td>' +
+          '<td class="py-2 text-gray-300">' + t.noteCount + '</td>' +
+          '<td class="py-2 text-gray-300">' + t.avgPitchRange + '</td>' +
+          '<td class="py-2 text-gray-300">' + t.instrument + '</td>';
+        // 整行点击 = 选中
+        tr.addEventListener("click", (e) => {
+          if (e.target.tagName !== "INPUT") {
+            const radio = tr.querySelector("input");
+            radio.checked = true;
+            onTrackSelected(t.id);
+          }
+        });
+        tbody.appendChild(tr);
+      });
+      // 直接 radio click
+      tbody.querySelectorAll(".cvt-b-track-radio").forEach(r => {
+        r.addEventListener("change", () => {
+          onTrackSelected(parseInt(r.value, 10));
+        });
+      });
+    }
+
+    function onTrackSelected(id) {
+      selectedTrackId = id;
+      document.getElementById("cvt-b-hint").textContent = "已选择 轨道 #" + id + " 作为旋律轨";
+      document.getElementById("cvt-b-hint").className = "text-emerald-400 text-xs";
+      document.getElementById("cvt-b-next-btn").disabled = false;
+    }
+
+    function resetTrackSelection() {
+      selectedTrackId = null;
+      const hint = document.getElementById("cvt-b-hint");
+      hint.textContent = "未选择轨道";
+      hint.className = "text-gray-500 text-xs";
+      document.getElementById("cvt-b-next-btn").disabled = true;
+      document.querySelectorAll(".cvt-b-track-radio").forEach(r => { r.checked = false; });
+    }
+
+    // ==================== 渲染预览数据(状态 C) ====================
+    function fillPreview() {
+      document.getElementById("cvt-c-title").value    = MOCK_MIDI_FILE.meta.title;
+      document.getElementById("cvt-c-composer").value = MOCK_MIDI_FILE.meta.composer;
+      document.getElementById("cvt-c-bpm").textContent      = MOCK_MIDI_FILE.meta.bpm;
+      document.getElementById("cvt-c-timesig").textContent  = MOCK_MIDI_FILE.meta.timeSignature;
+      document.getElementById("cvt-c-keysig").textContent   = MOCK_MIDI_FILE.meta.keySignature;
+      document.getElementById("cvt-c-duration").textContent = formatDuration(MOCK_MIDI_FILE.meta.totalDurationMs);
+    }
+
+    // ==================== 状态切换主入口 ====================
+    function showState(s) {
+      // 隐藏所有
+      ["a","b","c","d"].forEach(k => {
+        document.getElementById("cvt-state-" + k).classList.add("hidden-state");
+      });
+      document.getElementById("cvt-modal-e").classList.add("hidden-state");
+
+      // 改 flex
+      const stateMap = { A:"a", B:"b", C:"c", D:"d" };
+      if (stateMap[s]) {
+        const el = document.getElementById("cvt-state-" + stateMap[s]);
+        el.classList.remove("hidden-state");
+        el.classList.add("flex");
+      }
+      if (s === "E") {
+        document.getElementById("cvt-modal-e").classList.remove("hidden-state");
+      }
+
+      // label
+      document.getElementById("cvt-state-label").textContent = STATE_LABELS[s] || "";
+
+      // 调试栏按钮高亮
+      document.querySelectorAll(".cvt-debug-btn").forEach(b => {
+        if (b.dataset.state === s) {
+          b.classList.add("bg-blue-600");
+          b.classList.remove("bg-gray-700");
+        } else {
+          b.classList.add("bg-gray-700");
+          b.classList.remove("bg-blue-600");
+        }
+      });
+
+      // 进入对应状态时的初始化
+      if (s === "B") {
+        // 文件 banner 填充
+        document.getElementById("cvt-b-filename").textContent = MOCK_MIDI_FILE.name;
+        document.getElementById("cvt-b-filesize").textContent = "(" + MOCK_MIDI_FILE.sizeKB + " KB)";
+        document.getElementById("cvt-b-format").textContent   = "已识别:" + MOCK_MIDI_FILE.format;
+        resetTrackSelection();
+      }
+      if (s === "C") {
+        fillPreview();
+      }
+      if (s === "D") {
+        // 文件名默认 = 曲名
+        const title = document.getElementById("cvt-c-title").value || MOCK_MIDI_FILE.meta.title;
+        document.getElementById("cvt-d-filename").value = title;
+      }
+    }
+
+    // ==================== 异常弹窗文案切换 ====================
+    function bindErrorMessageRadio() {
+      document.querySelectorAll(".cvt-e-radio").forEach(r => {
+        r.addEventListener("change", () => {
+          if (r.checked) {
+            document.getElementById("cvt-e-message").textContent = ERROR_MESSAGES[r.value];
+          }
+        });
+      });
+    }
+
+    // ==================== 保存成功 toast ====================
+    function showSavedToast() {
+      const toast = document.getElementById("cvt-toast");
+      toast.classList.remove("hidden-state");
+      setTimeout(() => {
+        toast.classList.add("hidden-state");
+        console.log("nav: library");
+      }, 1000);
+    }
+
+    // ==================== 事件绑定 ====================
+    function bindEvents() {
+      // 调试栏
+      document.querySelectorAll(".cvt-debug-btn").forEach(b => {
+        b.addEventListener("click", () => showState(b.dataset.state));
+      });
+
+      // AppBar 返回
+      document.getElementById("cvt-back-btn").addEventListener("click", () => {
+        console.log("nav: back");
+      });
+
+      // 状态 A:选文件 → 跳到 B
+      document.getElementById("cvt-pick-file-btn").addEventListener("click", () => {
+        console.log("mock: picked " + MOCK_MIDI_FILE.name);
+        showState("B");
+      });
+
+      // 状态 B:下一步
+      document.getElementById("cvt-b-next-btn").addEventListener("click", () => {
+        if (selectedTrackId == null) return;
+        showState("C");
+      });
+
+      // 状态 C:上一步 / 下一步
+      document.getElementById("cvt-c-prev-btn").addEventListener("click", () => showState("B"));
+      document.getElementById("cvt-c-next-btn").addEventListener("click", () => showState("D"));
+
+      // 状态 D:取消 / 确认保存
+      document.getElementById("cvt-d-cancel-btn").addEventListener("click", () => showState("C"));
+      document.getElementById("cvt-d-confirm-btn").addEventListener("click", () => {
+        showSavedToast();
+      });
+
+      // 异常弹窗:知道了 → 回到 A
+      document.getElementById("cvt-e-ok-btn").addEventListener("click", () => {
+        showState("A");
+      });
+
+      // 错误文案 radio
+      bindErrorMessageRadio();
+    }
+
+    // ==================== 初始化 ====================
+    renderTracks();
+    bindEvents();
+    showState("A");
+  </script>
+
+  <!--
+  ========== 元素清单 ==========
+
+  | 编号    | 名称                     | 类型        | 状态                  | 行为                                                                |
+  |---------|--------------------------|-------------|-----------------------|---------------------------------------------------------------------|
+  | CVT-01  | 调试栏容器               | div         | 静态                  | 原型期专用,屏幕右上角浮层,标注"原型调试用"                          |
+  | CVT-02  | 调试按钮 A/B/C/D/E       | Button×5    | 默认/高亮             | 点击切换 5 个状态,当前状态按钮蓝色高亮                              |
+  | CVT-03  | AppBar 返回箭头          | IconButton  | 默认/按下             | 点击 → console.log("nav: back")                                     |
+  | CVT-04  | AppBar 标题              | 文本        | 静态                  | 显示"从 MIDI 文件创建"                                              |
+  | CVT-05  | AppBar 状态标签          | 文本        | 动态                  | 实时显示当前状态名,例"状态 A · 未选文件"                            |
+  | CVT-A1  | 选择 MIDI 文件 大按钮    | Button      | 默认/悬停             | 点击 → console.log("mock: picked")并跳到状态 B                      |
+  | CVT-A2  | 格式提示文字             | 文本        | 静态                  | 显示"支持 SMF 格式 0 与 1,单字节编码"                              |
+  | CVT-B1  | 文件 banner              | div         | 动态                  | 显示文件名/大小/"已识别:SMF 格式 1,3 轨道"                          |
+  | CVT-B2  | 轨道列表表头             | thead       | 静态                  | 列:轨号/通道/note 数/平均音域/通道乐器                              |
+  | CVT-B3  | 轨道列表行               | tr × 3      | 默认/选中             | 点击行或 radio 选中,选中后高亮提示                                  |
+  | CVT-B4  | 轨道单选 radio           | radio × 3   | 未选/选中             | 选中后启用底部「下一步」                                            |
+  | CVT-B5  | 选择状态提示             | 文本        | 动态                  | 未选→"未选择轨道";已选→"已选择 轨道 #X 作为旋律轨"                  |
+  | CVT-B6  | 下一步:预览 按钮         | Button      | 禁用/启用             | 默认禁用;选轨后启用;点击 → 状态 C                                  |
+  | CVT-C1  | 曲名输入框               | Input       | 可编辑                | 默认 MOCK_MIDI_FILE.meta.title = "Canon in D"                       |
+  | CVT-C2  | 作曲家输入框             | Input       | 可编辑                | 默认 MOCK_MIDI_FILE.meta.composer = "Pachelbel"                     |
+  | CVT-C3  | 元信息卡 BPM             | 卡片        | 静态                  | 显示 75                                                             |
+  | CVT-C4  | 元信息卡 拍号            | 卡片        | 静态                  | 显示 4/4                                                            |
+  | CVT-C5  | 元信息卡 调号            | 卡片        | 静态                  | 显示 D                                                              |
+  | CVT-C6  | 元信息卡 总时长          | 卡片        | 静态                  | mm:ss,显示 04:45 (来自 285000ms)                                    |
+  | CVT-C7  | 前 8 拍下落预览缩略图    | SVG         | 静态                  | 8 个彩色矩形 + 判定线 + 拍标,模拟下落形态                           |
+  | CVT-C8  | 上一步 按钮              | Button      | 默认                  | 点击 → 状态 B                                                       |
+  | CVT-C9  | 下一步:保存 按钮         | Button      | 默认                  | 点击 → 状态 D                                                       |
+  | CVT-D1  | 文件名输入框             | Input       | 可编辑                | 默认值 = 状态 C 的曲名 (进入 D 时同步)                              |
+  | CVT-D2  | 保存目录提示             | 文本        | 静态                  | "保存到 App 私有目录"+ 具体路径示例                                 |
+  | CVT-D3  | 取消 按钮                | Button      | 默认                  | 点击 → 状态 C                                                       |
+  | CVT-D4  | 确认保存 按钮            | Button      | 默认                  | 点击 → toast → 1s 后 console.log("nav: library")                    |
+  | CVT-D5  | "已保存" toast           | div         | 隐藏/显示             | 居中绿色提示,1 秒后自动隐藏                                         |
+  | CVT-E1  | 异常 modal 背景          | div         | 隐藏/显示             | 半透明黑色遮罩                                                      |
+  | CVT-E2  | 异常 modal 标题          | 文本        | 静态                  | "无法导入"+ 警告图标                                                |
+  | CVT-E3  | 文案切换 radio           | radio × 2   | format2 / corrupted   | 切换显示哪条错误文案                                                |
+  | CVT-E4  | 错误文案显示             | 文本        | 动态                  | 显示对应 ERROR_MESSAGES[value]                                      |
+  | CVT-E5  | 知道了 按钮              | Button      | 默认                  | 点击 → 关闭 modal 并回到状态 A                                      |
+
+  -->
+</body>
+</html>

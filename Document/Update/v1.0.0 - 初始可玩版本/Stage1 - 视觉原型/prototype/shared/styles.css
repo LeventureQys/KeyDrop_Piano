@@ -1,0 +1,194 @@
+/* ============================================================
+ * KeyDrop_Piano v1.0.0 视觉原型 - 公共样式表
+ * 仅供 prototype/index.html 自身使用。
+ * 子页面 (pages/*.html) 自包含 Tailwind CDN + 内联 style,
+ * 不引用本文件。
+ * ============================================================ */
+
+/* ---------- CSS 自定义变量 (像素口诀: 原型像素 x 2 = 真机像素) ---------- */
+:root {
+  /* 屏幕尺寸 (横屏 2400x1080 真机, 1:2 缩放) */
+  --screen-width: 1200px;          /* 屏幕宽度 (单位: px, 原型像素) */
+  --screen-height: 540px;          /* 屏幕高度 (单位: px, 原型像素) */
+
+  /* 分区高度 */
+  --info-bar-height: 81px;         /* 信息栏高度 = 540 * 15% (单位: px) */
+  --keyboard-height: 108px;        /* 键盘高度   = 540 * 20% (单位: px) */
+  --fall-area-height: 351px;       /* 下落区高度 = 540 - 81 - 108 (单位: px) */
+
+  /* 键盘单键尺寸 */
+  --white-key-width: 37px;         /* 白键宽 = 1200 / 32 取整 (单位: px) */
+  --black-key-width: 22px;         /* 黑键宽 = 37 * 0.6 (单位: px) */
+  --black-key-height-ratio: 0.6;   /* 黑键高度比例 (无单位) */
+
+  /* 动画 */
+  --fall-speed: 234;               /* 下落速度 = 351 / 1.5s (单位: px/s, 数值裸量) */
+  --fall-loop-ms: 4000;            /* 循环周期 (单位: ms) */
+
+  /* 主入口装饰 */
+  --frame-radius: 16px;            /* 手机壳圆角 (单位: px) */
+  --frame-padding: 18px;           /* 手机壳内边距 (单位: px) */
+  --frame-bezel: #111827;          /* 手机壳金属色 */
+  --frame-shadow: 0 24px 60px rgba(0, 0, 0, 0.35),
+                  0 8px 18px rgba(0, 0, 0, 0.18);
+  --frame-highlight: rgba(255, 255, 255, 0.08);
+
+  /* 主题色 */
+  --bg-page: #f3f4f6;
+  --bg-nav: #1f2937;
+  --text-nav: #f9fafb;
+  --text-muted: #9ca3af;
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+}
+
+/* ---------- 全局重置 ---------- */
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC",
+               "Microsoft YaHei", sans-serif;
+  background: var(--bg-page);
+  color: #111827;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- 顶部导航条 ---------- */
+.app-nav {
+  width: 100%;
+  background: var(--bg-nav);
+  color: var(--text-nav);
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.app-nav__title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-right: 16px;
+  white-space: nowrap;
+}
+
+.app-nav__tabs {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.app-nav__tab {
+  background: transparent;
+  color: var(--text-nav);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, transform 0.18s;
+}
+
+.app-nav__tab:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.app-nav__tab.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.app-nav__reload {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-nav);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.18s;
+}
+
+.app-nav__reload:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* ---------- 主区: 屏幕容器 + 手机壳装饰 ---------- */
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  min-height: calc(100vh - 64px);
+}
+
+.iframe-frame {
+  /* 手机壳: 在 1200x540 屏幕外再加一圈 padding + 圆角 + 阴影 */
+  padding: var(--frame-padding);
+  background: linear-gradient(160deg, #1f2937 0%, #0b1220 100%);
+  border-radius: calc(var(--frame-radius) + var(--frame-padding) / 2);
+  box-shadow: var(--frame-shadow);
+  position: relative;
+  /* 顶部高光,模拟金属外壳反光 */
+  border-top: 1px solid var(--frame-highlight);
+}
+
+.iframe-frame::before {
+  /* 模拟手机顶部听筒/摄像头小条 (装饰) */
+  content: "";
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 64px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.screen {
+  /* 屏幕本体: iframe 严格 1200x540 */
+  width: var(--screen-width);
+  height: var(--screen-height);
+  border: 0;
+  border-radius: var(--frame-radius);
+  background: #000;
+  display: block;
+  overflow: hidden;
+}
+
+.stage__caption {
+  margin-top: 18px;
+  font-size: 13px;
+  color: #4b5563;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.stage__caption code {
+  background: #e5e7eb;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+/* ---------- 响应式 (浏览器窗口太窄时允许横向滚动查看完整 1200) ---------- */
+@media (max-width: 1280px) {
+  .stage {
+    overflow-x: auto;
+  }
+}

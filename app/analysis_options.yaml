@@ -1,0 +1,17 @@
+# KeyDrop_Piano 静态分析配置。
+# 见 Stage 2 设计文档 4.1：在 flutter_lints 基础上启用更严格的类型与风格约束。
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    - prefer_const_constructors
+    - prefer_final_locals
+    - avoid_print
+    - always_declare_return_types
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-raw-types: true
+  errors:
+    invalid_annotation_target: ignore

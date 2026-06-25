@@ -1,0 +1,11 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+# OS
+.DS_Store
+Thumbs.db
+# Build outputs (root-level, also covered by app/.gitignore)
+/build/
+# Temp
+*.tmp

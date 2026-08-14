@@ -7,5 +7,8 @@
 Thumbs.db
 # Build outputs (root-level, also covered by app/.gitignore)
 /build/
+# 构建产物保险：任何位置都不允许 APK/AAB 入库
+*.apk
+*.aab
 # Temp
 *.tmp

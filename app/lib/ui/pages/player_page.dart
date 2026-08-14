@@ -361,56 +361,79 @@ class PlayerPageState extends State<PlayerPage>
     );
   }
 
-  // ---------------- 错音红框脉冲（原型 300ms） ----------------
+  // ---------------- 错音红框脉冲（原型 6px / 300ms） ----------------
 
   Widget _buildErrorFlash() {
     return IgnorePointer(
       child: Container(
         decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFFEF4444), width: 3),
+          border: Border.all(color: const Color(0xFFEF4444), width: 6),
         ),
       ),
     );
   }
 
-  // ---------------- 暂停遮罩（T7：继续/重新开始/退出） ----------------
+  // ---------------- 暂停遮罩（T7：继续/重新开始/退出，原型样式） ----------------
 
   Widget _buildPauseOverlay() {
     return Container(
-      color: Colors.black.withAlpha(160),
+      color: Colors.black.withAlpha(179), // rgba(0,0,0,0.7)
       alignment: Alignment.center,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          const Icon(Icons.pause_circle_outline,
-              color: Colors.white, size: 48),
-          const SizedBox(height: 16),
+          const Text('已暂停',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w600)),
+          const SizedBox(height: 20),
           ElevatedButton.icon(
             onPressed: _ctrl.resume,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+            ),
             icon: const Icon(Icons.play_arrow),
             label: const Text('继续'),
           ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
+          const SizedBox(height: 10),
+          ElevatedButton.icon(
             onPressed: _ctrl.restart,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6B7280),
+            ),
             icon: const Icon(Icons.replay),
             label: const Text('重新开始'),
           ),
-          const SizedBox(height: 8),
-          TextButton(
+          const SizedBox(height: 10),
+          ElevatedButton.icon(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('退出'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+            ),
+            icon: const Icon(Icons.close),
+            label: const Text('退出'),
           ),
         ],
       ),
     );
   }
 
-  // ---------------- 结算页（F2 + Stage 6 4.6） ----------------
+  // ---------------- 结算页（F2 + Stage 6 4.6 + 原型样式） ----------------
+
+  /// 评级映射（原型 87% → 评级 A）：A ≥ 80 / B ≥ 60 / C ≥ 40 / D ≥ 20 / E。
+  static String _ratingOf(double pct) {
+    if (pct >= 80) return 'A';
+    if (pct >= 60) return 'B';
+    if (pct >= 40) return 'C';
+    if (pct >= 20) return 'D';
+    return 'E';
+  }
 
   Widget _buildResult() {
     final JudgmentStats s = _ctrl.stats;
     final double pct = s.scorePercent;
+    final String rating = _ratingOf(pct);
     final Color pctColor = pct >= 80
         ? const Color(0xFF16A34A)
         : pct >= 50
@@ -422,14 +445,20 @@ class PlayerPageState extends State<PlayerPage>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          const Text('演奏结束',
-              style: TextStyle(color: Colors.white, fontSize: 20)),
+          const Text('演奏完成',
+              style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 20)),
           const SizedBox(height: 8),
           Text('${pct.toStringAsFixed(1)}%',
               style: TextStyle(
                   color: pctColor,
                   fontSize: 48,
-                  fontWeight: FontWeight.bold)),
+                  fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text('评级 $rating',
+              style: const TextStyle(
+                  color: Color(0xFFFBBF24),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600)),
           const SizedBox(height: 20),
           _resultRow('完美', s.perfect, const Color(0xFF22D3EE)),
           _resultRow('抢拍', s.early, const Color(0xFFFBBF24)),
@@ -444,13 +473,19 @@ class PlayerPageState extends State<PlayerPage>
                 onPressed: () {
                   setState(_ctrl.restart);
                 },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                ),
                 icon: const Icon(Icons.replay),
                 label: const Text('再来一次'),
               ),
               const SizedBox(width: 16),
-              OutlinedButton.icon(
+              ElevatedButton.icon(
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.library_music_outlined),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4B5563),
+                ),
+                icon: const Icon(Icons.arrow_back),
                 label: const Text('返回库'),
               ),
             ],

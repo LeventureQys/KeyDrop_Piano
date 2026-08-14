@@ -79,7 +79,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          const Text('🎹', style: TextStyle(fontSize: 80)),
+          const Text('🎹', style: TextStyle(fontSize: 120)),
           const SizedBox(height: 16),
           const Text('还没有任何谱面',
               style: TextStyle(fontSize: 18, color: Colors.white)),
@@ -202,37 +202,52 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   }
 
   Widget _buildFab() {
+    // 原型：子项 translateY 8→0 + opacity 0→1（0.18s）；+ 旋转 45°（0.22s）。
+    Widget option(Widget child) => AnimatedSlide(
+          offset: _fabOpen ? Offset.zero : const Offset(0, 0.35),
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          child: AnimatedOpacity(
+            opacity: _fabOpen ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 180),
+            child: IgnorePointer(
+              ignoring: !_fabOpen,
+              child: child,
+            ),
+          ),
+        );
+
     return Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: <Widget>[
-        if (_fabOpen) ...<Widget>[
-          _FabOption(
-            icon: Icons.folder_open,
-            label: '导入 DK 谱',
-            color: const Color(0xFF7C3AED),
-            onTap: () {
-              setState(() => _fabOpen = false);
-              _importDkScore();
-            },
-          ),
-          const SizedBox(height: 8),
-          _FabOption(
-            icon: Icons.music_note,
-            label: '从 MIDI 文件创建',
-            color: const Color(0xFF2563EB),
-            onTap: () {
-              setState(() => _fabOpen = false);
-              _navToConvert();
-            },
-          ),
-          const SizedBox(height: 8),
-        ],
+        option(_FabOption(
+          icon: Icons.folder_open,
+          label: '导入 DK 谱',
+          color: const Color(0xFF9333EA),
+          onTap: () {
+            setState(() => _fabOpen = false);
+            _importDkScore();
+          },
+        )),
+        const SizedBox(height: 8),
+        option(_FabOption(
+          icon: Icons.music_note,
+          label: '从 MIDI 文件创建',
+          color: const Color(0xFF2563EB),
+          onTap: () {
+            setState(() => _fabOpen = false);
+            _navToConvert();
+          },
+        )),
+        const SizedBox(height: 8),
         FloatingActionButton(
           backgroundColor: const Color(0xFF2563EB),
           onPressed: () => setState(() => _fabOpen = !_fabOpen),
           child: AnimatedRotation(
             turns: _fabOpen ? 0.125 : 0,
-            duration: const Duration(milliseconds: 180),
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.ease,
             child: const Icon(Icons.add, color: Colors.white),
           ),
         ),

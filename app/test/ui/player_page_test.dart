@@ -117,7 +117,7 @@ void main() {
     // 全部判定 → 学习模式结束 → 结算页。
     await tester.pump(const Duration(milliseconds: 100));
     expect(state.controller.phase, PlayerPhase.finished);
-    expect(find.text('演奏结束'), findsOneWidget);
+    expect(find.text('演奏完成'), findsOneWidget);
     // 3 完美 + 1 错音 → (3*100)/4 = 75.0%。
     expect(find.text('75.0%'), findsOneWidget);
 

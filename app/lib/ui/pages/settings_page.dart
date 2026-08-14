@@ -249,14 +249,15 @@ class SettingsPage extends ConsumerWidget {
         Future<void>.delayed(const Duration(seconds: 3), () => finish(null));
         return const AlertDialog(
           backgroundColor: Color(0xFF1F2937),
-          title: Text('校准中…', style: TextStyle(color: Colors.white)),
+          title: Text('输入延迟校准', style: TextStyle(color: Colors.white)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               CircularProgressIndicator(),
               SizedBox(height: 12),
               Text(
-                '请在电钢琴上按下任意键…',
+                '请在电钢琴上按下任意键…\n3 秒后自动取消',
+                textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey, fontSize: 13),
               ),
             ],

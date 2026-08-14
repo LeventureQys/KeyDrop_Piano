@@ -321,7 +321,7 @@ class ConvertPage extends ConsumerWidget {
             const Icon(Icons.warning_amber,
                 color: Color(0xFFF87171), size: 40),
             const SizedBox(height: 12),
-            const Text('无法导入',
+            const Text('⚠ 无法导入',
                 style: TextStyle(color: Colors.white, fontSize: 16)),
             const SizedBox(height: 8),
             Container(

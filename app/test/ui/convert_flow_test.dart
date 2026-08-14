@@ -78,7 +78,7 @@ void main() {
       await container.read(convertStateProvider.notifier).injectRawBytes(bytes);
     });
     await tester.pump();
-    expect(find.text('无法导入'), findsOneWidget);
+    expect(find.textContaining('无法导入'), findsOneWidget);
     expect(find.textContaining('格式 2'), findsWidgets);
 
     // 知道了 → 回到初始状态。
@@ -96,7 +96,7 @@ void main() {
       await container.read(convertStateProvider.notifier).injectRawBytes(bytes);
     });
     await tester.pump();
-    expect(find.text('无法导入'), findsOneWidget);
+    expect(find.textContaining('无法导入'), findsOneWidget);
     expect(find.textContaining('损坏'), findsWidgets);
   });
 }

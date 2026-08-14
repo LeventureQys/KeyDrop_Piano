@@ -180,5 +180,95 @@ void main() {
       expect(noteJson.containsKey('finger'), isTrue);
       expect(noteJson['finger'], isNull);
     });
+
+    test('T8 相等性：同值对象 == 且 hashCode 一致，异值不相等', () {
+      final DkScore a = DkScore.fromJsonString(_sample.toJsonString());
+      final DkScore b = DkScore.fromJsonString(_sample.toJsonString());
+      expect(a, equals(b));
+      expect(a.hashCode, b.hashCode);
+
+      // tempoMap 不同 → 不相等
+      final DkScore c = DkScore.fromJsonString(_sample
+          .toJsonString()
+          .replaceFirst('"bpm": 120', '"bpm": 90'));
+      expect(a, isNot(equals(c)));
+
+      // DkNote 单字段不同 → 不相等
+      const DkNote n1 = DkNote(t: 0, d: 100, pitch: 60, velocity: 80);
+      const DkNote n2 = DkNote(t: 0, d: 100, pitch: 60, velocity: 90);
+      const DkNote n3 = DkNote(t: 0, d: 100, pitch: 60, velocity: 80);
+      expect(n1, isNot(equals(n2)));
+      expect(n1, equals(n3));
+      expect(n1.hashCode, n3.hashCode);
+
+      // DkTempoEvent 相等性
+      const DkTempoEvent e1 = DkTempoEvent(t: 0, bpm: 120);
+      const DkTempoEvent e2 = DkTempoEvent(t: 0, bpm: 120);
+      const DkTempoEvent e3 = DkTempoEvent(t: 0, bpm: 100);
+      expect(e1, equals(e2));
+      expect(e1.hashCode, e2.hashCode);
+      expect(e1, isNot(equals(e3)));
+
+      // DkTrack 不同 id → 不相等
+      const DkTrack t1 = DkTrack(id: 'main', notes: <DkNote>[n1]);
+      const DkTrack t2 = DkTrack(id: 'other', notes: <DkNote>[n1]);
+      expect(t1, isNot(equals(t2)));
+    });
+
+    test('T9 异常版本号解析：非法/缺 minor 不崩溃', () {
+      // 无 minor（"1"）→ 合法，不抛不告警。
+      final String raw1 = _sample.toJsonString().replaceFirst('"1.0"', '"1"');
+      var warn1 = 0;
+      final DkScore d1 =
+          DkScore.fromJsonString(raw1, onWarning: (String _) => warn1++);
+      expect(d1.dkVersion, '1');
+      expect(warn1, 0);
+
+      // 非数字（"abc"）→ 解析为 0 → 走占位升级告警，不崩溃。
+      final String raw2 =
+          _sample.toJsonString().replaceFirst('"1.0"', '"abc"');
+      var warn2 = 0;
+      final DkScore d2 =
+          DkScore.fromJsonString(raw2, onWarning: (String _) => warn2++);
+      expect(d2.dkVersion, 'abc');
+      expect(warn2, greaterThanOrEqualTo(1));
+    });
+
+    test('T10 DkMeta 相等性与 indented 输出', () {
+      const DkMeta m1 = DkMeta(
+        title: 't',
+        composer: 'c',
+        sourceMidiSha256: 's',
+        bpmBase: 120,
+        timeSignature: '4/4',
+        keySignature: 'C',
+        totalDurationMs: 1000,
+      );
+      const DkMeta m2 = DkMeta(
+        title: 't',
+        composer: 'c',
+        sourceMidiSha256: 's',
+        bpmBase: 120,
+        timeSignature: '4/4',
+        keySignature: 'C',
+        totalDurationMs: 1000,
+      );
+      const DkMeta m3 = DkMeta(
+        title: 'x',
+        composer: 'c',
+        sourceMidiSha256: 's',
+        bpmBase: 120,
+        timeSignature: '4/4',
+        keySignature: 'C',
+        totalDurationMs: 1000,
+      );
+      expect(m1, equals(m2));
+      expect(m1.hashCode, m2.hashCode);
+      expect(m1, isNot(equals(m3)));
+
+      final String pretty = _sample.toJsonString();
+      expect(pretty, contains('\n'));
+      expect(pretty, contains('  "dkVersion": "1.0"'));
+    });
   });
 }

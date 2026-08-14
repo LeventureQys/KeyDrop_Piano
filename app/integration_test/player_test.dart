@@ -222,4 +222,59 @@ void main() {
     expect(s.perfect, 1);
     expect(s.miss, 1); // t=0 的 note 已在 2x 时间线下掉 key
   });
+
+  testWidgets('Stage7-场景3：学习模式演奏完成 → 返回库',
+      (WidgetTester tester) async {
+    final DkScore score = _loadScore('simple_format0_8bars.mid');
+    final List<DkNote> notes = score.tracks.single.notes;
+    final DebugMidiInjector injector = DebugMidiInjector.none();
+
+    // 宿主页面 + 推入播放器。
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (BuildContext context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => PlayerPage(
+                        score: score,
+                        config: _config(mode: PlayMode.learning),
+                        midiInput: injector,
+                        lifecycle: const _NoopLifecycle(),
+                        initialMode: PlayMode.learning,
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('进入播放器'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('进入播放器'));
+    await tester.pumpAndSettle();
+
+    // 学习模式依次按对全部 note。
+    injector.inject(_noteOn(notes[0].pitch));
+    await tester.pump();
+    for (var i = 1; i < notes.length; i++) {
+      await tester.pump(const Duration(milliseconds: 500));
+      injector.inject(_noteOn(notes[i].pitch));
+      await tester.pump();
+    }
+    // 结束并出现结算页。
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('演奏完成'), findsOneWidget);
+
+    // 返回库 → 回到宿主页面。
+    await tester.tap(find.text('返回库'));
+    await tester.pumpAndSettle();
+    expect(find.text('进入播放器'), findsOneWidget);
+    expect(find.text('演奏完成'), findsNothing);
+  });
 }

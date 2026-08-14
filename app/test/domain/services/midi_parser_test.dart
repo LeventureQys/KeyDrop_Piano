@@ -119,4 +119,73 @@ void main() {
       );
     });
   });
+
+  group('不支持/损坏文案契约（Stage 3 不支持文件处理.md U1-U4/C1-C6）', () {
+    String messageOf(void Function() body) {
+      try {
+        body();
+      } on DkException catch (e) {
+        return e.message;
+      }
+      fail('expected DkException');
+    }
+
+    test('U1 格式 2', () {
+      expect(
+        messageOf(() => parser.parse(_readFixture('format2.mid'))),
+        '此文件为 SMF 格式 2，v1.0.0 仅支持格式 0/1。',
+      );
+    });
+
+    test('U2 SMPTE 时基', () {
+      final Uint8List f = _file(_mthd(0, 1), _mtrk(<int>[0, 0xFF, 0x2F, 0]));
+      // 替换 division 为 SMPTE（最高位 1）。
+      f[12] = 0xE8;
+      f[13] = 0x28;
+      expect(messageOf(() => parser.parse(f)), '此文件使用 SMPTE 时基，暂不支持。');
+    });
+
+    test('U3 未知格式', () {
+      final Uint8List f = _file(_mthd(3, 1), _mtrk(<int>[0, 0xFF, 0x2F, 0]));
+      expect(messageOf(() => parser.parse(f)), '未知的 SMF 格式 (3)。');
+    });
+
+    test('U4 无可演奏音符', () {
+      final List<int> body = <int>[0x00, 0xFF, 0x2F, 0x00];
+      expect(
+        messageOf(() => parser.parse(_file(_mthd(0, 1), _mtrk(body)))),
+        '未在文件中找到可演奏的音符。',
+      );
+    });
+
+    test('C1 MThd 魔数损坏', () {
+      expect(
+        messageOf(() => parser.parse(_readFixture('corrupted.mid'))),
+        '文件已损坏：在 chunk header 处读取失败。',
+      );
+    });
+
+    test('C2 MThd 长度字段异常', () {
+      final Uint8List f = Uint8List.fromList(<int>[
+        ...'MThd'.codeUnits,
+        0, 0, 0, 7, // 长度 7 ≠ 6
+        0, 1, 0, 1, 1, 0xE0,
+      ]);
+      expect(
+        messageOf(() => parser.parse(f)),
+        startsWith('文件已损坏：MThd 长度字段异常'),
+      );
+    });
+
+    test('C5 running status 缺失', () {
+      final List<int> body = <int>[
+        0x00, 60, 0x64, // 无状态字节且无 running status
+        0x00, 0xFF, 0x2F, 0x00,
+      ];
+      expect(
+        messageOf(() => parser.parse(_file(_mthd(0, 1), _mtrk(body)))),
+        '文件已损坏：running status 缺失。',
+      );
+    });
+  });
 }

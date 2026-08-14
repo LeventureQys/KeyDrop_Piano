@@ -1,81 +1,109 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../domain/models/dk_score.dart';
 
-/// 下落 Key 绘制器 CustomPainter。
+/// 下落 Key 绘制器 CustomPainter（Stage 6 设计文档 4.2 + 原型视觉规范）。
 ///
-/// 计算每个 note 的 y 坐标 = `judgeLineY - (note.t - currentTimeMs) * pxPerMs`。
+/// - y 坐标 = `判定线Y - (note.t - currentTimeMs) * pxPerMs`（下落时长可调）。
+/// - 白键音 `#60A5FA`，黑键音 `#A78BFA`；长按尾（d ≥ 200ms）半透明矩形。
+/// - 学习模式等待中的 note 钳制在判定线上，`#FACC15` 呼吸动画（0.8s 周期）。
+/// - 判定线：`#F59E0B` 发光横线。
 class FallingPainter extends CustomPainter {
   FallingPainter({
     required this.notes,
     required this.currentTimeMs,
     required this.fallDurationMs,
     required this.fallingAreaHeight,
-    required this.scrollOffsetPitch,
+    required this.scrollPitch,
+    required this.whiteKeyW,
+    required this.blackKeyW,
+    this.learning = false,
+    this.waitingIdentities = const <int>{},
   });
 
   final List<DkNote> notes;
   final int currentTimeMs;
   final double fallDurationMs;
   final double fallingAreaHeight;
-  final int scrollOffsetPitch;
+  final int scrollPitch;
+  final double whiteKeyW;
+  final double blackKeyW;
+  final bool learning;
+  final Set<int> waitingIdentities;
 
-  static const double whiteKeyW = 37;
-  static const double blackKeyW = 22;
+  static const Color whiteNoteColor = Color(0xFF60A5FA);
+  static const Color blackNoteColor = Color(0xFFA78BFA);
+  static const Color whiteTailColor = Color(0xFF2563EB);
+  static const Color blackTailColor = Color(0xFF7C3AED);
+  static const Color waitingColor = Color(0xFFFACC15);
+  static const Color judgeLineColor = Color(0xFFF59E0B);
 
-  double get _pxPerMs =>
-      fallingAreaHeight / fallDurationMs;
+  double get _pxPerMs => fallingAreaHeight / fallDurationMs;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final double judgeLineY = size.height;
-    final int startPitch = scrollOffsetPitch;
+    final double judgeLineY = size.height - 2;
 
     for (final DkNote n in notes) {
-      // 只画在可视范围内的 note（~当前时间前后一段）
+      final int identity = n.t * 256 + n.pitch;
+      final bool waiting = learning && waitingIdentities.contains(identity);
+
       final int ahead = n.t - currentTimeMs;
-      final double y = judgeLineY - ahead * _pxPerMs;
+      double y = judgeLineY - ahead * _pxPerMs;
+      if (waiting) {
+        y = judgeLineY; // 停在判定线上等待
+      }
 
-      // 超出视口上下的大范围不画
-      if (y < -200 || y > size.height + 50) continue;
+      if (y < -260 || y > size.height + 50) {
+        continue;
+      }
 
-      final double x = _keyX(n.pitch, startPitch);
+      final double x = _keyX(n.pitch);
       final double w = _isWhite(n.pitch) ? whiteKeyW : blackKeyW;
       final bool isBlack = !_isWhite(n.pitch);
 
-      // 长按尾巴
-      final double tailH = n.d * _pxPerMs;
-      final Rect tail = Rect.fromLTWH(x, y - tailH, w, tailH);
+      // 长按尾巴（E3：duration > 200ms 显示拖尾，长度 = 时长 × 像素/毫秒）。
+      if (n.d >= 200) {
+        final double tailH = n.d * _pxPerMs;
+        final Rect tail = Rect.fromLTWH(x, y - tailH, w, tailH);
+        canvas.drawRect(
+          tail,
+          Paint()
+            ..color = (isBlack ? blackTailColor : whiteTailColor).withAlpha(120),
+        );
+      }
 
-      final Color noteColor =
-          isBlack ? const Color(0xFFA78BFA) : const Color(0xFF60A5FA);
-      final Color tailColor =
-          isBlack ? const Color(0xFF7C3AED) : const Color(0xFF2563EB);
-
-      // 画尾巴
-      canvas.drawRect(
-        tail,
-        Paint()..color = tailColor.withAlpha(120),
-      );
-
-      // 画 note 主体（圆角矩形）
+      // note 主体（圆角矩形）
+      Color bodyColor = isBlack ? blackNoteColor : whiteNoteColor;
+      if (waiting) {
+        // 呼吸动画：0.8s 周期，透明度 0.65~1.0。
+        final double phase = (currentTimeMs % 800) / 800.0;
+        final double breath =
+            0.65 + 0.35 * (0.5 + 0.5 * math.sin(phase * 2 * math.pi));
+        bodyColor = waitingColor.withAlpha((255 * breath).round());
+      }
       final RRect body = RRect.fromRectAndRadius(
         Rect.fromLTWH(x, y - 14, w, 14),
         const Radius.circular(3),
       );
-      canvas.drawRRect(body, Paint()..color = noteColor);
+      canvas.drawRRect(body, Paint()..color = bodyColor);
     }
 
-    // 判定线
+    // 判定线（发光）
+    final Paint glowPaint = Paint()
+      ..color = judgeLineColor.withAlpha(90)
+      ..strokeWidth = 6
+      ..strokeCap = StrokeCap.round;
     final Paint linePaint = Paint()
-      ..color = const Color(0xFFFCD34D)
+      ..color = judgeLineColor
       ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
+      ..strokeCap = StrokeCap.round;
     canvas.drawLine(
-      Offset(0, judgeLineY),
-      Offset(size.width, judgeLineY),
-      linePaint,
-    );
+        Offset(0, judgeLineY), Offset(size.width, judgeLineY), glowPaint);
+    canvas.drawLine(
+        Offset(0, judgeLineY), Offset(size.width, judgeLineY), linePaint);
   }
 
   @override
@@ -83,12 +111,16 @@ class FallingPainter extends CustomPainter {
     return oldDelegate.currentTimeMs != currentTimeMs ||
         oldDelegate.notes != notes ||
         oldDelegate.fallDurationMs != fallDurationMs ||
-        oldDelegate.scrollOffsetPitch != scrollOffsetPitch;
+        oldDelegate.scrollPitch != scrollPitch ||
+        oldDelegate.whiteKeyW != whiteKeyW ||
+        oldDelegate.blackKeyW != blackKeyW ||
+        oldDelegate.learning != learning ||
+        oldDelegate.waitingIdentities != waitingIdentities;
   }
 
-  static double _keyX(int pitch, int startPitch) {
+  double _keyX(int pitch) {
     final int myW = whiteIndex(pitch);
-    final int startW = whiteIndex(startPitch);
+    final int startW = whiteIndex(scrollPitch);
     if (_isWhite(pitch)) {
       return (myW - startW).toDouble() * whiteKeyW;
     }
@@ -110,11 +142,12 @@ class FallingPainter extends CustomPainter {
     return octave * 7 + w;
   }
 
-  /// pitch 之前的最近白键的 whiteIndex。
   static int whiteIndexOfPrev(int pitch) {
     var p = pitch - 1;
     while (p >= 0) {
-      if (_isWhite(p)) return whiteIndex(p);
+      if (_isWhite(p)) {
+        return whiteIndex(p);
+      }
       p--;
     }
     return 0;

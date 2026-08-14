@@ -1,16 +1,18 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import '../../../domain/ports/file_system_port.dart';
+import '../../domain/exceptions/dk_exception.dart';
+import '../../domain/ports/file_system_port.dart';
 
 /// 开发/测试用内存文件系统（实现 FileSystemPort）。
 ///
-/// 数据仅存于内存，重启即丢失。用于桌面开发与单元测试，
+/// 数据仅存于内存，重启即丢失。用于桌面开发与单元/Widget 测试，
 /// 生产环境替换为 [AndroidFileSystemAdapter]。
 class InMemoryFileSystemPort implements FileSystemPort {
   InMemoryFileSystemPort();
 
-  /// 预填示例数据（含 5 条谱面）。
+  /// 预填示例数据（含 5 条谱面）。仅桌面演示用；真实设备由
+  /// [AndroidFileSystemAdapter] 提供空库 → 导入引导。
   factory InMemoryFileSystemPort.withSampleData() {
     final InMemoryFileSystemPort fs = InMemoryFileSystemPort();
     const List<Map<String, String>> samples = <Map<String, String>>[
@@ -54,6 +56,10 @@ class InMemoryFileSystemPort implements FileSystemPort {
 
   final Map<String, _FileEntry> _entries = <String, _FileEntry>{};
   int _nextId = 1;
+
+  /// 注入的"待选 MIDI"内容（桌面/测试模拟 SAF 选择结果）。
+  Uint8List? _pickedMidiBytes;
+  String? _pickedMidiName;
 
   void _addSample(
       String title, String composer, String modified, int sizeKb) {
@@ -99,7 +105,7 @@ class InMemoryFileSystemPort implements FileSystemPort {
   Future<String> readDkScore(String fileId) async {
     final _FileEntry? entry = _entries[fileId];
     if (entry == null) {
-      throw Exception('File not found: $fileId');
+      throw FileSystemAccessException('File not found: $fileId');
     }
     return entry.content;
   }
@@ -119,27 +125,51 @@ class InMemoryFileSystemPort implements FileSystemPort {
   @override
   Future<void> renameDkScore(String fileId, String newName) async {
     final _FileEntry? entry = _entries[fileId];
-    if (entry != null) {
-      entry.displayName = newName;
-      entry._modified = DateTime.now();
+    if (entry == null) {
+      throw FileSystemAccessException('File not found: $fileId');
     }
+    entry.displayName = newName;
+    entry._modified = DateTime.now();
   }
 
   @override
   Future<String?> pickMidiFile() async {
-    // Mock: 返回 null 表示用户取消
-    return null;
+    // 桌面/测试无 SAF：返回注入的伪路径（未注入 = 用户取消）。
+    return _pickedMidiBytes != null ? 'memory://${_pickedMidiName ?? 'picked.mid'}' : null;
+  }
+
+  @override
+  Future<Uint8List?> readMidiFile(String path) async {
+    return _pickedMidiBytes;
+  }
+
+  @override
+  Future<String?> importDkScore() async {
+    // 桌面/测试：从注入的伪"外部文件"导入。
+    final String? name = _pickedMidiName;
+    final Uint8List? bytes = _pickedMidiBytes;
+    if (name == null || bytes == null) {
+      return null;
+    }
+    final String content = utf8.decode(bytes);
+    // 校验内容确为 DK 谱（含 dkVersion 字段）。
+    final Map<String, dynamic> json = jsonDecode(content) as Map<String, dynamic>;
+    if (json['dkVersion'] == null) {
+      throw FileSystemAccessException('所选文件不是有效的 DK 谱（缺少 dkVersion）。');
+    }
+    return writeDkScore(
+        name.endsWith('.dk.json') ? name : '$name.dk.json', content);
   }
 
   /// 直接注入 MIDI 字节供转换测试（替代 SAF 选择）。
-  Future<void> injectMidiBytes(String name, Uint8List bytes) {
-    // 存储到 _tempMidi 字段供 pick 返回
-    return Future<void>.value();
+  void injectMidiBytes(String name, Uint8List bytes) {
+    _pickedMidiName = name;
+    _pickedMidiBytes = bytes;
   }
 
   @override
   Future<bool> exportDkScore(String fileId) async {
-    return true;
+    return _entries.containsKey(fileId);
   }
 }
 

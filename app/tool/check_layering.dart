@@ -9,8 +9,11 @@ import 'dart:io';
 
 const List<String> _banned = <String>[
   'package:flutter/',
+  'package:flutter_riverpod/',
   'dart:io',
   'dart:ui',
+  'dart:html',
+  'dart:js',
   'package:shared_preferences/',
   '../platform/',
   'package:keydrop_piano/platform/',

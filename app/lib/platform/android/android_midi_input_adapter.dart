@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 
+import '../../domain/exceptions/dk_exception.dart';
 import '../../domain/ports/midi_input_port.dart';
 
 /// Android MIDI 实时输入适配器（实现 MidiInputPort）。
@@ -10,16 +12,24 @@ import '../../domain/ports/midi_input_port.dart';
 /// EventChannel `keydrop_piano/midi_events` 接收 11 字节固定包：
 ///   [0]: status, [1]: data1, [2]: data2, [3-10]: timestampUs（大端 64 位）
 /// EventChannel `keydrop_piano/midi_device` 接收 UTF-8 字节数组或 null。
+///
+/// 事件缓冲：领域契约 C3 要求事件队列长度 256。超出时丢弃最旧事件
+/// （实时判定场景宁可丢旧也不能延迟）。
 class AndroidMidiInputAdapter implements MidiInputPort {
   AndroidMidiInputAdapter() {
     _init();
   }
 
-  late final StreamController<String?> _deviceController =
+  /// 事件队列长度上限（问题清单 C3）。
+  static const int kEventQueueLength = 256;
+
+  final StreamController<String?> _deviceController =
       StreamController<String?>.broadcast();
 
-  late final StreamController<MidiEvent> _eventController =
+  final StreamController<MidiEvent> _eventController =
       StreamController<MidiEvent>.broadcast();
+
+  final Queue<MidiEvent> _pending = Queue<MidiEvent>();
 
   @override
   Stream<String?> get connectedDeviceName => _deviceController.stream;
@@ -46,25 +56,57 @@ class AndroidMidiInputAdapter implements MidiInputPort {
     });
 
     _eventChannel.receiveBroadcastStream().listen((dynamic data) {
-      if (data is! Uint8List) return;
+      if (data is! Uint8List) {
+        return;
+      }
       final List<Uint8List> packets = splitMidiPackets(data);
       for (final Uint8List packet in packets) {
         final MidiEvent? event = decodeMidiPacket(packet);
         if (event != null) {
-          _eventController.add(event);
+          _enqueue(event);
         }
       }
     });
   }
 
+  void _enqueue(MidiEvent event) {
+    if (_pending.length >= kEventQueueLength) {
+      _pending.removeFirst(); // 丢弃最旧事件
+    }
+    _pending.addLast(event);
+    // 非阻塞地按帧消费：同一微任务内新增的事件合并推送。
+    if (!_draining) {
+      _draining = true;
+      scheduleMicrotask(_drain);
+    }
+  }
+
+  bool _draining = false;
+
+  void _drain() {
+    _draining = false;
+    while (_pending.isNotEmpty) {
+      _eventController.add(_pending.removeFirst());
+    }
+  }
+
   @override
   Future<void> tryConnect() async {
-    await _controlChannel.invokeMethod('tryConnect');
+    try {
+      await _controlChannel.invokeMethod('tryConnect');
+    } on PlatformException catch (e) {
+      throw MidiDeviceConnectionException(
+          e.message ?? '无法连接 MIDI 设备，请检查 USB OTG 连接。');
+    }
   }
 
   @override
   Future<void> disconnect() async {
-    await _controlChannel.invokeMethod('disconnect');
+    try {
+      await _controlChannel.invokeMethod('disconnect');
+    } on PlatformException catch (e) {
+      throw MidiDeviceConnectionException(e.message ?? '断开 MIDI 设备失败。');
+    }
   }
 
   /// 按 11 字节固定包切分。[公开以示测试]。
@@ -81,7 +123,9 @@ class AndroidMidiInputAdapter implements MidiInputPort {
 
   /// 解码 11 字节固定包为 MidiEvent。[公开以示测试]。
   static MidiEvent? decodeMidiPacket(Uint8List packet) {
-    if (packet.length < 11) return null;
+    if (packet.length < 11) {
+      return null;
+    }
     final int status = packet[0];
     final int data1 = packet[1];
     final int data2 = packet[2];

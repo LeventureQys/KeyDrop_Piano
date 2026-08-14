@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../di/providers.dart';
 import '../../domain/models/midi_data.dart';
 
+/// 谱面转换页（Stage 5 设计文档 4.3）：A 选文件 → B 选旋律轨 → C 预览 →
+/// D 保存 → E 错误，五状态机。
 class ConvertPage extends ConsumerWidget {
   const ConvertPage({super.key});
 
@@ -27,8 +29,8 @@ class ConvertPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildBody(
-      ConvertState state, ConvertStateNotifier notifier, BuildContext context) {
+  Widget _buildBody(ConvertState state, ConvertStateNotifier notifier,
+      BuildContext context) {
     switch (state.page) {
       case ConvertPageState.aNoFile:
         return _stateA(notifier);
@@ -68,7 +70,8 @@ class ConvertPage extends ConsumerWidget {
   }
 
   Widget _stateB(ConvertState state, ConvertStateNotifier notifier) {
-    final List<MidiTrackInfo> tracks = state.midiData?.tracks ?? <MidiTrackInfo>[];
+    final List<MidiTrackInfo> tracks =
+        state.midiData?.tracks ?? <MidiTrackInfo>[];
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -93,7 +96,7 @@ class ConvertPage extends ConsumerWidget {
                         style: const TextStyle(
                             color: Colors.white, fontSize: 14),
                       ),
-                      const Text('请选择一条作为「旋律轨」',
+                      const Text('请选择一条作为「旋律轨」（或选择"合并全部轨道"）',
                           style: TextStyle(
                               color: Color(0xFF6B7280), fontSize: 12)),
                     ],
@@ -104,46 +107,26 @@ class ConvertPage extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
           Expanded(
-            child: ListView.separated(
-              itemCount: tracks.length,
-              separatorBuilder: (_, _) =>
-                  const Divider(color: Color(0xFF374151)),
-              itemBuilder: (BuildContext context, int index) {
-                final MidiTrackInfo t = tracks[index];
-                final bool sel = state.selectedTrackIndex == index;
-                return GestureDetector(
-                  onTap: () => notifier.selectTrack(index),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    color: sel ? const Color(0xFF2563EB).withAlpha(50) : null,
-                    child: Row(
-                      children: <Widget>[
-                        Icon(
-                          sel ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                          color: sel ? const Color(0xFF2563EB) : const Color(0xFF6B7280),
-                          size: 20,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(
-                                '轨道 ${t.trackIndex + 1} · ${t.trackName ?? "通道 ${t.channel}"}',
-                                style: const TextStyle(color: Colors.white, fontSize: 13),
-                              ),
-                              Text(
-                                '${t.noteCount} notes${t.minPitch >= 0 ? " · 音域 ${_pitchName(t.minPitch)}-${_pitchName(t.maxPitch)}" : ""}',
-                                style: const TextStyle(color: Color(0xFF6B7280), fontSize: 11),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
+            child: ListView(
+              children: <Widget>[
+                // 合并全部轨道选项（D2：melodyTrackIndex = null）
+                _trackTile(
+                  state,
+                  notifier,
+                  '合并全部轨道',
+                  '所有轨道合并为单条时间线（去重）',
+                  null,
+                ),
+                ...tracks.map((MidiTrackInfo t) {
+                  return _trackTile(
+                    state,
+                    notifier,
+                    '轨道 ${t.trackIndex + 1} · ${t.trackName ?? "通道 ${t.channel}"}',
+                    '${t.noteCount} notes${t.minPitch >= 0 ? " · 音域 ${_pitchName(t.minPitch)}-${_pitchName(t.maxPitch)}" : ""}',
+                    t.trackIndex,
+                  );
+                }),
+              ],
             ),
           ),
           Padding(
@@ -158,12 +141,53 @@ class ConvertPage extends ConsumerWidget {
                   disabledBackgroundColor: const Color(0xFF374151),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
-                child: const Text('下一步：保存',
+                child: const Text('下一步：预览',
                     style: TextStyle(fontSize: 14)),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _trackTile(
+    ConvertState state,
+    ConvertStateNotifier notifier,
+    String title,
+    String subtitle,
+    int? trackIndex,
+  ) {
+    final bool sel = state.selectedTrackIndex == trackIndex;
+    return GestureDetector(
+      onTap: () => notifier.selectTrack(trackIndex ?? -1),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        color: sel ? const Color(0xFF2563EB).withAlpha(50) : null,
+        child: Row(
+          children: <Widget>[
+            Icon(
+              sel ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+              color:
+                  sel ? const Color(0xFF2563EB) : const Color(0xFF6B7280),
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(title,
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 13)),
+                  Text(subtitle,
+                      style: const TextStyle(
+                          color: Color(0xFF6B7280), fontSize: 11)),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -182,12 +206,15 @@ class ConvertPage extends ConsumerWidget {
               spacing: 8,
               runSpacing: 8,
               children: <Widget>[
-                _metaCard('BPM', state.midiData!.tempoMap.isNotEmpty
-                    ? state.midiData!.tempoMap.first.bpm.toStringAsFixed(0)
-                    : '—'),
+                _metaCard(
+                    'BPM',
+                    state.midiData!.tempoMap.isNotEmpty
+                        ? state.midiData!.tempoMap.first.bpm.toStringAsFixed(0)
+                        : '—'),
                 _metaCard('拍号', state.midiData!.timeSignature),
                 _metaCard('调号', state.midiData!.keySignature),
                 _metaCard('总时长', _fmtMs(state.midiData!.totalDurationMs)),
+                _metaCard('源文件', 'sha256\n${state.sourceMidiSha256.substring(0, state.sourceMidiSha256.length > 12 ? 12 : state.sourceMidiSha256.length)}…'),
               ],
             ),
           const Spacer(),
@@ -195,8 +222,7 @@ class ConvertPage extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: <Widget>[
               OutlinedButton(
-                onPressed: () => notifier.selectTrack(
-                    state.selectedTrackIndex ?? 0),
+                onPressed: notifier.backToTrack,
                 child: const Text('上一步'),
               ),
               ElevatedButton(
@@ -213,8 +239,8 @@ class ConvertPage extends ConsumerWidget {
     );
   }
 
-  Widget _stateD(
-      ConvertState state, ConvertStateNotifier notifier, BuildContext context) {
+  Widget _stateD(ConvertState state, ConvertStateNotifier notifier,
+      BuildContext context) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -248,14 +274,15 @@ class ConvertPage extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: <Widget>[
                 OutlinedButton(
-                  onPressed: () =>
-                      notifier.selectTrack(state.selectedTrackIndex ?? 0),
+                  onPressed: notifier.backToTrack,
                   child: const Text('取消'),
                 ),
                 ElevatedButton(
                   onPressed: () async {
                     await notifier.confirmSave();
-                    if (!context.mounted) return;
+                    if (!context.mounted) {
+                      return;
+                    }
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('✓ 已保存'),
@@ -291,7 +318,8 @@ class ConvertPage extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            const Icon(Icons.warning_amber, color: Color(0xFFF87171), size: 40),
+            const Icon(Icons.warning_amber,
+                color: Color(0xFFF87171), size: 40),
             const SizedBox(height: 12),
             const Text('无法导入',
                 style: TextStyle(color: Colors.white, fontSize: 16)),
@@ -304,7 +332,8 @@ class ConvertPage extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(state.message,
-                  style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13)),
+                  style: const TextStyle(
+                      color: Color(0xFFFCA5A5), fontSize: 13)),
             ),
             const SizedBox(height: 16),
             ElevatedButton(
@@ -337,7 +366,7 @@ class ConvertPage extends ConsumerWidget {
 
   Widget _metaCard(String label, String value) {
     return Container(
-      width: 120,
+      width: 140,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: const Color(0xFF1F2937),
@@ -350,7 +379,8 @@ class ConvertPage extends ConsumerWidget {
               style: const TextStyle(color: Color(0xFF6B7280), fontSize: 11)),
           const SizedBox(height: 4),
           Text(value,
-              style: const TextStyle(color: Colors.white, fontSize: 16)),
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontSize: 14)),
         ],
       ),
     );

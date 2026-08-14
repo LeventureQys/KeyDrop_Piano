@@ -1,0 +1,281 @@
+{
+  "dkVersion": "1.0",
+  "meta": {
+    "title": "",
+    "composer": "",
+    "sourceMidiSha256": "",
+    "bpmBase": 120,
+    "timeSignature": "4/4",
+    "keySignature": "C",
+    "totalDurationMs": 16000
+  },
+  "tracks": [
+    {
+      "id": "main",
+      "notes": [
+        {
+          "t": 0,
+          "d": 500,
+          "pitch": 60,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 500,
+          "d": 500,
+          "pitch": 62,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 1000,
+          "d": 500,
+          "pitch": 64,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 1500,
+          "d": 500,
+          "pitch": 65,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 2000,
+          "d": 500,
+          "pitch": 67,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 2500,
+          "d": 500,
+          "pitch": 69,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 3000,
+          "d": 500,
+          "pitch": 71,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 3500,
+          "d": 500,
+          "pitch": 72,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 4000,
+          "d": 500,
+          "pitch": 60,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 4500,
+          "d": 500,
+          "pitch": 62,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 5000,
+          "d": 500,
+          "pitch": 64,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 5500,
+          "d": 500,
+          "pitch": 65,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 6000,
+          "d": 500,
+          "pitch": 67,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 6500,
+          "d": 500,
+          "pitch": 69,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 7000,
+          "d": 500,
+          "pitch": 71,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 7500,
+          "d": 500,
+          "pitch": 72,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 8000,
+          "d": 500,
+          "pitch": 60,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 8500,
+          "d": 500,
+          "pitch": 62,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 9000,
+          "d": 500,
+          "pitch": 64,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 9500,
+          "d": 500,
+          "pitch": 65,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 10000,
+          "d": 500,
+          "pitch": 67,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 10500,
+          "d": 500,
+          "pitch": 69,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 11000,
+          "d": 500,
+          "pitch": 71,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 11500,
+          "d": 500,
+          "pitch": 72,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 12000,
+          "d": 500,
+          "pitch": 60,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 12500,
+          "d": 500,
+          "pitch": 62,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 13000,
+          "d": 500,
+          "pitch": 64,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 13500,
+          "d": 500,
+          "pitch": 65,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 14000,
+          "d": 500,
+          "pitch": 67,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 14500,
+          "d": 500,
+          "pitch": 69,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 15000,
+          "d": 500,
+          "pitch": 71,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        },
+        {
+          "t": 15500,
+          "d": 500,
+          "pitch": 72,
+          "velocity": 100,
+          "hand": null,
+          "finger": null
+        }
+      ]
+    }
+  ],
+  "tempoMap": [
+    {
+      "t": 0,
+      "bpm": 120.0
+    }
+  ]
+}

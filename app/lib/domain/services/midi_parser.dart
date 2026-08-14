@@ -56,12 +56,12 @@ class MidiParser {
       }
       final String tMagic = r.readAscii(4);
       if (tMagic != 'MTrk') {
-        throw CorruptedMidiException('文件已损坏：音轨 header 缺失 (MTrk)。');
+        throw CorruptedMidiException('文件已损坏：音轨数据读取失败。');
       }
       final int trackLen = r.readU32();
       final int trackEnd = r.pos + trackLen;
       if (trackEnd > bytes.length) {
-        throw CorruptedMidiException('文件已损坏：音轨长度越界。');
+        throw CorruptedMidiException('文件已损坏：音轨数据读取失败。');
       }
 
       var absTick = 0;

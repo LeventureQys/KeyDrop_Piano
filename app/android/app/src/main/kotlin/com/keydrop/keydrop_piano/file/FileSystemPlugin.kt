@@ -19,9 +19,13 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
 
-/** Android 端文件系统操作：私有目录管理 + SAF 导入导出。 */
+/**
+ * Android 端文件系统操作（Stage 4.4 契约）：
+ * 私有目录管理（getExternalFilesDir）+ SAF 导入导出 + 临时 MIDI 字节读取。
+ */
 class FileSystemPlugin : FlutterPlugin, ActivityAware {
 
     private var channel: MethodChannel? = null
@@ -29,8 +33,10 @@ class FileSystemPlugin : FlutterPlugin, ActivityAware {
     private var ctx: Context? = null
 
     private var pickMidiLauncher: ActivityResultLauncher<Array<String>>? = null
+    private var pickDkLauncher: ActivityResultLauncher<Array<String>>? = null
     private var exportLauncher: ActivityResultLauncher<String>? = null
     private var pendingPickResult: MethodChannel.Result? = null
+    private var pendingImportResult: MethodChannel.Result? = null
     private var pendingExportFileId: String? = null
     private var pendingExportResult: MethodChannel.Result? = null
 
@@ -39,8 +45,11 @@ class FileSystemPlugin : FlutterPlugin, ActivityAware {
         privateDir = ctx?.getExternalFilesDir(null)
         channel = MethodChannel(binding.binaryMessenger, "keydrop_piano/file_system")
         channel?.setMethodCallHandler { call, result ->
-            try { handleCall(call, result) }
-            catch (e: Exception) { result.error("FILE_ERROR", e.message, null) }
+            try {
+                handleCall(call, result)
+            } catch (e: Exception) {
+                result.error("FILE_ERROR", e.message, null)
+            }
         }
     }
 
@@ -58,6 +67,12 @@ class FileSystemPlugin : FlutterPlugin, ActivityAware {
         ) { uri: Uri? ->
             handlePickResult(uri)
         }
+        pickDkLauncher = registry.register(
+            "pick_dk_${hashCode()}",
+            ActivityResultContracts.OpenDocument()
+        ) { uri: Uri? ->
+            handleImportResult(uri)
+        }
         exportLauncher = registry.register(
             "export_dk_${hashCode()}",
             ActivityResultContracts.CreateDocument("application/json")
@@ -68,8 +83,10 @@ class FileSystemPlugin : FlutterPlugin, ActivityAware {
 
     override fun onDetachedFromActivity() {
         pickMidiLauncher?.unregister()
+        pickDkLauncher?.unregister()
         exportLauncher?.unregister()
         pickMidiLauncher = null
+        pickDkLauncher = null
         exportLauncher = null
     }
 
@@ -108,11 +125,23 @@ class FileSystemPlugin : FlutterPlugin, ActivityAware {
                 pendingPickResult = result
                 pickMidiLauncher?.launch(arrayOf("audio/midi", "audio/x-midi", "*/*"))
             }
+            "readMidiFile" -> {
+                val path = call.argument<String>("path") ?: ""
+                val bytes = readMidiFile(path)
+                if (bytes == null) {
+                    result.error("READ_MIDI_ERROR", "MIDI file not readable: $path", null)
+                } else {
+                    result.success(bytes)
+                }
+            }
+            "importDkScore" -> {
+                pendingImportResult = result
+                pickDkLauncher?.launch(arrayOf("application/json", "*/*"))
+            }
             "exportDkScore" -> {
                 val fileId = call.argument<String>("fileId") ?: ""
                 pendingExportFileId = fileId
                 pendingExportResult = result
-                // Derive a default filename
                 val defaultName = resolveExportName(fileId)
                 exportLauncher?.launch(defaultName)
             }
@@ -128,17 +157,23 @@ class FileSystemPlugin : FlutterPlugin, ActivityAware {
         return dir
     }
 
+    /** ISO8601 格式（含时区），Dart 端 `DateTime.tryParse` 可直接解析。 */
+    private fun iso8601(date: Date): String {
+        val fmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS", Locale.US)
+        fmt.timeZone = TimeZone.getTimeZone("UTC")
+        return fmt.format(date) + "Z"
+    }
+
     private fun listDkScores(): String {
         val dir = ensureDir()
         val files = dir.listFiles { f -> f.name.endsWith(".dk.json") } ?: emptyArray()
         val arr = JSONArray()
-        val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
         for (f in files) {
             val obj = JSONObject()
             obj.put("fileId", f.name)
             obj.put("displayName", f.name.removeSuffix(".dk.json"))
             obj.put("sizeBytes", f.length())
-            obj.put("modifiedAt", fmt.format(Date(f.lastModified())))
+            obj.put("modifiedAt", iso8601(Date(f.lastModified())))
             arr.put(obj)
         }
         return arr.toString()
@@ -153,9 +188,8 @@ class FileSystemPlugin : FlutterPlugin, ActivityAware {
     private fun writeDkScore(fileName: String, content: String): String {
         val dir = ensureDir()
         val safe = if (fileName.endsWith(".dk.json")) fileName else "$fileName.dk.json"
-        val f = File(dir, safe)
+        var dest = File(dir, safe)
         // if exists, append suffix
-        var dest = f
         if (dest.exists()) {
             val base = safe.removeSuffix(".dk.json")
             dest = File(dir, "${base}_${UUID.randomUUID().toString().take(8)}.dk.json")
@@ -175,6 +209,12 @@ class FileSystemPlugin : FlutterPlugin, ActivityAware {
         val destName =
             if (newName.endsWith(".dk.json")) newName else "$newName.dk.json"
         f.renameTo(File(ensureDir(), destName))
+    }
+
+    private fun readMidiFile(path: String): ByteArray? {
+        val f = File(path)
+        if (!f.exists() || !f.canRead()) return null
+        return f.readBytes()
     }
 
     // ---- SAF callbacks ----
@@ -197,6 +237,47 @@ class FileSystemPlugin : FlutterPlugin, ActivityAware {
             result?.success(tmpFile.absolutePath)
         } catch (e: Exception) {
             result?.error("IMPORT_ERROR", e.message, null)
+        }
+    }
+
+    /** 导入外部 .dk.json：复制到私有目录并返回新 fileId（V9）。 */
+    private fun handleImportResult(uri: Uri?) {
+        val result = pendingImportResult
+        pendingImportResult = null
+        if (uri == null) {
+            result?.success(null)
+            return
+        }
+        try {
+            val input = ctx?.contentResolver?.openInputStream(uri)
+                ?: throw Exception("Cannot open URI")
+            val content = input.readBytes().toString(Charsets.UTF_8)
+            input.close()
+            // 从 JSON 中读取 meta.title 作为展示名；无则用文件显示名。
+            val display = displayNameOf(uri)?.removeSuffix(".dk.json") ?: "imported"
+            var title = display
+            try {
+                val meta = JSONObject(content).optJSONObject("meta")
+                val t = meta?.optString("title")
+                if (!t.isNullOrBlank()) title = t
+            } catch (_: Exception) {
+            }
+            val fileId = writeDkScore(title, content)
+            result?.success(fileId)
+        } catch (e: Exception) {
+            result?.error("IMPORT_ERROR", e.message, null)
+        }
+    }
+
+    private fun displayNameOf(uri: Uri): String? {
+        return try {
+            val cursor = ctx?.contentResolver?.query(uri, null, null, null, null)
+            cursor?.use {
+                val idx = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0 && it.moveToFirst()) it.getString(idx) else null
+            }
+        } catch (_: Exception) {
+            null
         }
     }
 

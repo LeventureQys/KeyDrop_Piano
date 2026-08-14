@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../di/providers.dart';
+import '../../domain/exceptions/dk_exception.dart';
+import '../../domain/models/app_config.dart';
 import '../../domain/models/dk_score.dart';
 import '../../domain/ports/file_system_port.dart';
 import 'convert_page.dart';
 import 'player_page.dart';
 import 'settings_page.dart';
 
+/// 谱面库页（Stage 5 设计文档 4.1）：
+/// 空库引导 / 列表 + 搜索 / FAB（导入 DK 谱、从 MIDI 创建）/ 长按菜单
+/// （演奏 / 重命名 / 导出 / 删除）/ 播放模式选择（V7）。
 class LibraryPage extends ConsumerStatefulWidget {
   const LibraryPage({super.key});
 
@@ -28,7 +33,8 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final AsyncValue<List<DkScoreFile>> scoresAsync = ref.watch(scoreListProvider);
+    final AsyncValue<List<DkScoreFile>> scoresAsync =
+        ref.watch(scoreListProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
@@ -59,10 +65,10 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       body: scoresAsync.when(
         data: (List<DkScoreFile> scores) =>
             scores.isEmpty ? _buildEmpty() : _buildFilled(scores),
-        loading: () =>
-            const Center(child: CircularProgressIndicator()),
-        error: (Object e, _) =>
-            Center(child: Text('加载失败: $e', style: const TextStyle(color: Colors.red))),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (Object e, _) => Center(
+            child: Text('加载失败: $e',
+                style: const TextStyle(color: Colors.red))),
       ),
       floatingActionButton: _buildFab(),
     );
@@ -100,7 +106,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         ? scores
         : scores
             .where((DkScoreFile s) =>
-                s.displayName.toLowerCase().startsWith(_query.toLowerCase()))
+                s.displayName.toLowerCase().contains(_query.toLowerCase()))
             .toList();
 
     return Column(
@@ -114,13 +120,17 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             style: const TextStyle(color: Colors.white, fontSize: 13),
             decoration: InputDecoration(
               hintText: '搜索曲名或作曲家…',
-              hintStyle: const TextStyle(color: Color(0xFF6B7280), fontSize: 13),
-              prefixIcon: const Icon(Icons.search, size: 18, color: Color(0xFF6B7280)),
+              hintStyle:
+                  const TextStyle(color: Color(0xFF6B7280), fontSize: 13),
+              prefixIcon: const Icon(Icons.search,
+                  size: 18, color: Color(0xFF6B7280)),
               suffixText: '${filtered.length} 首',
-              suffixStyle: const TextStyle(color: Color(0xFF6B7280), fontSize: 11),
+              suffixStyle:
+                  const TextStyle(color: Color(0xFF6B7280), fontSize: 11),
               filled: true,
               fillColor: const Color(0xFF374151),
-              contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+              contentPadding:
+                  const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: BorderSide.none,
@@ -155,7 +165,8 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                               width: 36,
                               height: 36,
                               decoration: BoxDecoration(
-                                color: const Color(0xFF2563EB).withAlpha(70),
+                                color:
+                                    const Color(0xFF2563EB).withAlpha(70),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: const Icon(Icons.music_note,
@@ -173,7 +184,8 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                                   Text(
                                     '${s.sizeBytes ~/ 1024} KB · ${_fmtDate(s.modifiedAt)}',
                                     style: const TextStyle(
-                                        color: Color(0xFF6B7280), fontSize: 11),
+                                        color: Color(0xFF6B7280),
+                                        fontSize: 11),
                                   ),
                                 ],
                               ),
@@ -200,6 +212,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             color: const Color(0xFF7C3AED),
             onTap: () {
               setState(() => _fabOpen = false);
+              _importDkScore();
             },
           ),
           const SizedBox(height: 8),
@@ -228,9 +241,33 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   }
 
   void _navToConvert() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const ConvertPage()),
-    ).then((_) => ref.invalidate(scoreListProvider));
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute<void>(builder: (_) => const ConvertPage()),
+        )
+        .then((_) => ref.invalidate(scoreListProvider));
+  }
+
+  /// V9：导入外部 .dk.json 到谱面库。
+  Future<void> _importDkScore() async {
+    final FileSystemPort fs = ref.read(fileSystemProvider);
+    try {
+      final String? fileId = await fs.importDkScore();
+      if (fileId == null) {
+        return; // 用户取消
+      }
+      ref.invalidate(scoreListProvider);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('✓ DK 谱已导入'),
+        backgroundColor: Color(0xFF16A34A),
+        duration: Duration(seconds: 1),
+      ));
+    } on DkException catch (e) {
+      _showError(e.message);
+    }
   }
 
   void _showContextMenu(
@@ -255,26 +292,55 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         ),
         const PopupMenuItem<String>(
           value: 'delete',
-          child: Text('删除',
-              style: TextStyle(color: Color(0xFFF87171))),
+          child: Text('删除', style: TextStyle(color: Color(0xFFF87171))),
         ),
       ],
     ).then((String? action) async {
-      if (action == 'delete') {
-        ref.read(fileSystemProvider).deleteDkScore(score.fileId);
-        ref.invalidate(scoreListProvider);
-      } else if (action == 'rename') {
-        _showRenameDialog(score);
-      } else if (action == 'play') {
-        await _playScore(score);
+      switch (action) {
+        case 'delete':
+          await _deleteScore(score);
+        case 'rename':
+          await _showRenameDialog(score);
+        case 'play':
+          await _playScore(score);
+        case 'export':
+          await _exportScore(score);
       }
     });
   }
 
-  void _showRenameDialog(DkScoreFile score) {
+  Future<void> _deleteScore(DkScoreFile score) async {
+    final FileSystemPort fs = ref.read(fileSystemProvider);
+    try {
+      await fs.deleteDkScore(score.fileId);
+      ref.invalidate(scoreListProvider);
+    } on DkException catch (e) {
+      _showError(e.message);
+    }
+  }
+
+  /// V9/T8：导出到 SAF 选定位置。
+  Future<void> _exportScore(DkScoreFile score) async {
+    final FileSystemPort fs = ref.read(fileSystemProvider);
+    try {
+      final bool ok = await fs.exportDkScore(score.fileId);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ok ? '✓ 已导出' : '导出已取消'),
+        backgroundColor: ok ? const Color(0xFF16A34A) : const Color(0xFF6B7280),
+        duration: const Duration(seconds: 1),
+      ));
+    } on DkException catch (e) {
+      _showError(e.message);
+    }
+  }
+
+  Future<void> _showRenameDialog(DkScoreFile score) async {
     final TextEditingController ctrl =
         TextEditingController(text: score.displayName);
-    showDialog<void>(
+    await showDialog<void>(
       context: context,
       builder: (BuildContext ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1F2937),
@@ -294,8 +360,15 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           ),
           TextButton(
             onPressed: () {
-              ref.read(fileSystemProvider).renameDkScore(score.fileId, ctrl.text);
-              ref.invalidate(scoreListProvider);
+              final FileSystemPort fs = ref.read(fileSystemProvider);
+              fs
+                  .renameDkScore(score.fileId, ctrl.text)
+                  .then((_) => ref.invalidate(scoreListProvider))
+                  .catchError((Object e) {
+                if (e is DkException) {
+                  _showError(e.message);
+                }
+              });
               Navigator.of(ctx).pop();
             },
             child: const Text('确定'),
@@ -309,18 +382,95 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 
+  /// 点击谱面 → 选择模式（V7）→ 播放。
   Future<void> _playScore(DkScoreFile s) async {
-    final String json =
-        await ref.read(fileSystemProvider).readDkScore(s.fileId);
-    final DkScore score = DkScore.fromJsonString(json);
-    if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => PlayerPage(
-          score: score,
-          config: ref.read(appConfigProvider),
-          midiInput: ref.read(midiInputProvider),
+    final PlayMode? mode = await _pickMode();
+    if (mode == null) {
+      return; // 取消
+    }
+    try {
+      final String json =
+          await ref.read(fileSystemProvider).readDkScore(s.fileId);
+      final DkScore score = DkScore.fromJsonString(json);
+      if (!mounted) {
+        return;
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => PlayerPage(
+            score: score,
+            config: ref.read(appConfigProvider),
+            midiInput: ref.read(midiInputProvider),
+            lifecycle: ref.read(lifecycleProvider),
+            initialMode: mode,
+          ),
         ),
+      );
+    } on DkException catch (e) {
+      _showError(e.message);
+    }
+  }
+
+  Future<PlayMode?> _pickMode() {
+    final PlayMode defaultMode = ref.read(appConfigProvider).defaultMode;
+    return showDialog<PlayMode>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1F2937),
+        title: const Text('选择模式', style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            ListTile(
+              leading: const Icon(Icons.school, color: Color(0xFF2563EB)),
+              title: const Text('学习模式',
+                  style: TextStyle(color: Colors.white)),
+              subtitle: const Text('key 会等你按对再继续',
+                  style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 11)),
+              selected: defaultMode == PlayMode.learning,
+              onTap: () => Navigator.of(ctx).pop(PlayMode.learning),
+            ),
+            ListTile(
+              leading: const Icon(Icons.bolt, color: Color(0xFF7C3AED)),
+              title: const Text('演奏模式',
+                  style: TextStyle(color: Colors.white)),
+              subtitle: const Text('按 MIDI 时间线推进并统计',
+                  style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 11)),
+              selected: defaultMode == PlayMode.performance,
+              onTap: () => Navigator.of(ctx).pop(PlayMode.performance),
+            ),
+          ],
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// DkException 统一弹窗（Version 3.5：AlertDialog 显示 message，不崩溃）。
+  void _showError(String message) {
+    if (!mounted) {
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1F2937),
+        title: const Text('出错了', style: TextStyle(color: Colors.white)),
+        content: Text(
+          '$message\n\n请检查文件 / 设备',
+          style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
       ),
     );
   }
@@ -362,4 +512,3 @@ class _FabOption extends StatelessWidget {
     );
   }
 }
-

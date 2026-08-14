@@ -1,0 +1,19 @@
+Resolving dependencies...
+Downloading packages...
+  _fe_analyzer_shared 99.0.0 (105.0.0 available)
+  analyzer 12.1.0 (14.1.0 available)
+  flutter_riverpod 3.3.2 (3.4.2 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  package_config 2.2.0 (3.0.0 available)
+  path_provider_linux 2.2.1 (2.2.2 available)
+  riverpod 3.3.2 (3.4.2 available)
+  shared_preferences_android 2.4.26 (2.4.27 available)
+  test 1.31.1 (1.31.2 available)
+  test_api 0.7.12 (0.7.13 available)
+  test_core 0.6.18 (0.6.19 available)
+  uuid 4.5.3 (4.6.0 available)
+Got dependencies!
+12 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Analyzing app...                                                
+No issues found! (ran in 4.6s)

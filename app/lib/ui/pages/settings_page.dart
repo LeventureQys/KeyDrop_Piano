@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../di/providers.dart';
 import '../../domain/models/app_config.dart';
+import '../../domain/ports/midi_input_port.dart';
 import '../widgets/seg_group.dart';
 
 class SettingsPage extends ConsumerWidget {
@@ -116,7 +119,7 @@ class SettingsPage extends ConsumerWidget {
                     SizedBox(
                       height: 32,
                       child: OutlinedButton.icon(
-                        onPressed: () => _showCalibrationDialog(context),
+                        onPressed: () => _showCalibrationDialog(context, ref),
                         icon: const Icon(Icons.tune, size: 14),
                         label: const Text('校准', style: TextStyle(fontSize: 12)),
                       ),
@@ -148,20 +151,30 @@ class SettingsPage extends ConsumerWidget {
                     ),
                   ],
                 ),
-                _Section(
+                const _Section(
                   icon: Icons.bug_report,
                   title: '调试',
                   children: <Widget>[
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: <Widget>[
-                        const Text('DebugMidiInjector',
+                        Text('DebugMidiInjector',
                             style: TextStyle(fontSize: 13)),
-                        Switch(
-                          value: config.enableDebugMidiInjector,
-                          onChanged: notifier.setEnableDebugMidiInjector,
+                        Text(
+                          kDebugMode ? '已启用（debug 构建）' : '未启用（release 构建）',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: kDebugMode
+                                ? Color(0xFF22C55E)
+                                : Color(0xFF9CA3AF),
+                          ),
                         ),
                       ],
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'debug 构建自动注入伪 MIDI 事件供自动化测试；真实 USB MIDI 输入不受影响。',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
                     ),
                   ],
                 ),
@@ -191,16 +204,49 @@ class SettingsPage extends ConsumerWidget {
     );
   }
 
-  void _showCalibrationDialog(BuildContext context) {
+  /// 输入延迟校准（决策 C3）：3 秒内按下电钢琴任一键，
+  /// 以"事件到达时刻 - 事件平台时间戳"作为链路延迟写入
+  /// `inputLatencyOffsetMs`；超时保持原值。
+  void _showCalibrationDialog(BuildContext context, WidgetRef ref) {
+    final MidiInputPort midi = ref.read(midiInputProvider);
+    StreamSubscription<MidiEvent>? sub;
+    bool done = false;
+
+    Future<void> finish(int? offsetMs) async {
+      if (done) {
+        return;
+      }
+      done = true;
+      await sub?.cancel();
+      if (!context.mounted) {
+        return;
+      }
+      Navigator.of(context).pop();
+      if (offsetMs != null) {
+        ref
+            .read(appConfigProvider.notifier)
+            .setInputLatencyOffsetMs(offsetMs.clamp(-100, 100));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('✓ 已校准：输入延迟 $offsetMs ms'),
+          backgroundColor: const Color(0xFF16A34A),
+          duration: const Duration(seconds: 2),
+        ));
+      }
+    }
+
     showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
-        Future<void>.delayed(const Duration(seconds: 3), () {
-          if (context.mounted) {
-            Navigator.of(context).pop();
+        sub = midi.events.listen((MidiEvent e) {
+          if (e.type != MidiEventType.noteOn || e.timestampUs <= 0) {
+            return;
           }
+          final int nowUs = DateTime.now().microsecondsSinceEpoch;
+          final int latencyMs = ((nowUs - e.timestampUs) / 1000).round();
+          finish(latencyMs);
         });
+        Future<void>.delayed(const Duration(seconds: 3), () => finish(null));
         return const AlertDialog(
           backgroundColor: Color(0xFF1F2937),
           title: Text('校准中…', style: TextStyle(color: Colors.white)),

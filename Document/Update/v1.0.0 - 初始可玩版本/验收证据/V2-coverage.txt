@@ -1,0 +1,17 @@
+KeyDrop_Piano v1.0.1 - V2 coverage summary
+command: flutter test --coverage
+domain files scanned: 11
+
+SF:lib\domain\exceptions\dk_exception.dart
+SF:lib\domain\models\app_config.dart
+SF:lib\domain\models\dk_score.dart
+SF:lib\domain\models\midi_data.dart
+SF:lib\domain\services\dk_generator.dart
+SF:lib\domain\services\midi_parser.dart
+SF:lib\domain\services\bpm_scaler.dart
+SF:lib\domain\ports\file_system_port.dart
+SF:lib\domain\ports\midi_input_port.dart
+SF:lib\domain\services\judgment_engine.dart
+SF:lib\domain\services\statistics_aggregator.dart
+
+domain: lines hit 525 / found 614 = 85.5% (threshold >= 80%)

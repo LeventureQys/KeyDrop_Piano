@@ -26,29 +26,53 @@ KeyDrop_Piano 是一款"下落式钢琴学习辅助"应用。用户无需先掌�
 
 | 项 | 状态 |
 |---|---|
-| Version | v1.0.0 - 初始可玩版本 |
-| 规划阶段 | 问题清单已关闭，进入 Stage 拆分与设计 |
-| 代码 | 暂未初始化 Flutter 工程（Stage 1 完成视觉原型后启动） |
+| Version | v1.0.1（v1.0.0 初始可玩版本的代码补完轮次，分支 `v1.0.1`） |
+| 架构范式 | 三层（UI / Domain / Platform Adapter）+ 领域层零平台依赖，强制执行 |
+| 核心闭环 | MIDI 导入 → DK 谱生成 → 横屏下落播放 → USB OTG 实时判定（学习/演奏双模式）→ 统计结算 → DK 谱导入导出 |
+| 验证 | `flutter analyze` 0 问题、`flutter test` 全绿、分层检查通过、`integration_test` 5 场景（V3） |
+| 真机验收 | 待用户配合（小米 17 Ultra + 电钢琴），见 `Stage7 .../真机验收指南.md` |
 
 ## 目录结构
 
 ```
 KeyDrop_Piano/
 ├── README.md                                # 本文件
+├── scripts/
+│   └── check_layering.sh                    # 分层强制约束自检（验收 V1）
 ├── Document/
 │   ├── Agent开发规范.md                      # MainAgent / SubAgent 强制门禁
 │   └── Update/
 │       └── v1.0.0 - 初始可玩版本/
 │           ├── 需求文档.md
 │           ├── 问题清单.md
-│           ├── 设计文档.md                   # Version 级设计
-│           ├── 验收文档.md                   # Version 级验收
-│           └── Stage1 - 视觉原型/
-│               ├── 设计文档.md
-│               └── 验收文档.md
-├── app/                                     # Flutter 工程根目录（后续 Stage 创建）
+│           ├── 设计文档.md                   # Version 级设计（含接口契约）
+│           ├── 验收文档.md                   # Version 级验收（V1-V11）
+│           └── Stage1 - 视觉原型/ ... Stage7 - 集成测试与收尾/
+├── app/                                     # Flutter 工程
+│   ├── lib/
+│   │   ├── domain/                          # 领域层：模型 / 端口 / 服务 / 异常（纯 Dart）
+│   │   ├── platform/                        # 平台层：android 适配器 + debug 测试钩子
+│   │   ├── ui/                              # UI 层：页面 / 绘制器 / 通用控件
+│   │   └── di/                              # Riverpod Provider 集中注册
+│   ├── test/                                # 单元 + Widget 测试（与 lib 镜像结构）
+│   ├── test_fixtures/                       # 验收文档 2.3 命名的 MIDI 与 golden DK 谱
+│   ├── integration_test/                    # V3 端到端场景（DebugMidiInjector）
+│   └── tool/                                # check_layering / gen_midi_fixtures
 └── ...
 ```
+
+## 快速验证（app/ 目录）
+
+```bash
+flutter pub get
+flutter analyze                      # V4：0 问题
+flutter test                         # V2：单元 + Widget 测试全绿
+dart run tool/check_layering.dart    # F-01：领域层零平台依赖
+flutter build apk --debug            # 产物：build/app/outputs/flutter-apk/app-debug.apk
+flutter test integration_test/       # V3：需已连接 Android 设备/模拟器
+```
+
+> 构建环境：Flutter 3.x stable + JDK 21 + Android SDK（platform 36 / build-tools 34+36 / NDK 27.0.12077973）。Gradle 依赖与 SDK 组件下载走代理时，在 `android/gradle.properties` 配置 `systemProp.http(s).proxyHost/Port`。
 
 ## 开发流程
 
